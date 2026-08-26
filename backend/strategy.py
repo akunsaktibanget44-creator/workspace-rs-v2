@@ -229,6 +229,8 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
         await db.okr_objectives.delete_many({"period_id": pid})
         await db.kpi_items.delete_many({"period_id": pid})
         await db.strategy_projects.delete_many({"period_id": pid})
+        await db.strategy_evaluations.delete_many({"period_id": pid})
+        await db.strategy_vision.delete_many({"period_id": pid})
         return {"ok": True, "deleted": r.deleted_count}
 
     @router.post("/periods/{pid}/activate")
@@ -640,6 +642,117 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
         update["period_id"] = period_id
         await db.strategy_vision.update_one({"period_id": period_id}, {"$set": update}, upsert=True)
         return await db.strategy_vision.find_one({"period_id": period_id}, {"_id": 0})
+
+    # ================================================================
+    # EVALUASI — Periode Review (SPV)
+    # ================================================================
+    class EvaluationUpdate(BaseModel):
+        model_config = ConfigDict(extra="ignore")
+        summary: Optional[str] = None
+        kesimpulan: Optional[str] = None  # REWARD | EVALUASI | NETRAL
+        highlights: Optional[List[str]] = None
+        improvements: Optional[List[str]] = None
+        next_focus: Optional[List[str]] = None
+
+    @router.get("/evaluation")
+    async def get_evaluation(period_id: str, _: dict = Depends(get_current_user)):
+        """Auto-computed period review + saved SPV notes."""
+        note = await db.strategy_evaluations.find_one({"period_id": period_id}, {"_id": 0}) or {
+            "period_id": period_id, "summary": "", "kesimpulan": "NETRAL",
+            "highlights": [], "improvements": [], "next_focus": [],
+        }
+        # Auto compute
+        bsc_all = await db.bsc_targets.find({"period_id": period_id}, {"_id": 0}).to_list(500)
+        bsc_by_aspek: dict = {"FINANCIAL": [], "CUSTOMER": [], "INTERNAL": [], "LEARNING": []}
+        for b in bsc_all:
+            bsc_by_aspek.setdefault(b.get("aspek", "INTERNAL"), []).append(b)
+
+        # OKR data
+        okrs = await db.okr_objectives.find({"period_id": period_id}, {"_id": 0}).to_list(500)
+        oids = [o["id"] for o in okrs]
+        krs = await db.okr_keyresults.find({"objective_id": {"$in": oids}}, {"_id": 0}).to_list(2000) if oids else []
+        krs_by_obj: dict = {}
+        for k in krs:
+            krs_by_obj.setdefault(k["objective_id"], []).append(k)
+        ang_map = await _decorate_anggota_map()
+        div_map = await _decorate_divisi_map()
+
+        okr_list = []
+        for o in okrs:
+            local = []
+            for kr in krs_by_obj.get(o["id"], []):
+                try:
+                    tgt = float(kr.get("target") or 0)
+                    act = float(kr.get("actual") or 0)
+                    if tgt > 0:
+                        local.append(min(200, (act / tgt) * 100))
+                except (TypeError, ValueError):
+                    pass
+            pct = round(sum(local) / len(local), 1) if local else 0
+            okr_list.append({
+                "id": o["id"], "objective": o.get("objective"),
+                "owner_nama": (ang_map.get(o.get("owner_id")) or {}).get("nama") if o.get("owner_id") else None,
+                "divisi_nama": (div_map.get(o.get("divisi_id")) or {}).get("nama") if o.get("divisi_id") else None,
+                "level": o.get("level"),
+                "progress": pct,
+                "status": "EXCELLENT" if pct >= 100 else "ON_TRACK" if pct >= 70 else "AT_RISK" if pct >= 40 else "OFF_TRACK",
+            })
+
+        # KPI aggregated per anggota
+        kpis = await db.kpi_items.find({"period_id": period_id}, {"_id": 0}).to_list(1000)
+        by_anggota: dict = {}
+        for k in kpis:
+            w, st = _score_kpi(k.get("polaritas") or "MAX", float(k.get("bobot") or 0),
+                               float(k.get("target") or 0), float(k.get("aktual") or 0))
+            aid = k.get("anggota_id")
+            if aid not in by_anggota:
+                ang = ang_map.get(aid)
+                div = div_map.get(ang.get("divisi_id")) if ang else None
+                by_anggota[aid] = {"anggota_id": aid, "anggota_nama": ang.get("nama") if ang else "-",
+                                   "divisi_nama": div.get("nama") if div else "-", "bobot": 0, "score": 0, "count": 0}
+            by_anggota[aid]["bobot"] += float(k.get("bobot") or 0)
+            by_anggota[aid]["score"] += w
+            by_anggota[aid]["count"] += 1
+
+        rank = sorted(by_anggota.values(), key=lambda x: x["score"], reverse=True)
+
+        # Divisi ranking (avg of anggota scores)
+        div_agg: dict = {}
+        for r in by_anggota.values():
+            dv = r["divisi_nama"]
+            div_agg.setdefault(dv, {"nama": dv, "score_sum": 0, "n": 0})
+            div_agg[dv]["score_sum"] += r["score"]
+            div_agg[dv]["n"] += 1
+        div_rank = sorted([{"nama": d["nama"], "avg_score": round(d["score_sum"] / d["n"], 2) if d["n"] else 0} for d in div_agg.values()], key=lambda x: x["avg_score"], reverse=True)
+
+        # Off-track picks
+        off_okrs = [o for o in okr_list if o["status"] == "OFF_TRACK"][:10]
+        at_risk = [o for o in okr_list if o["status"] == "AT_RISK"][:10]
+
+        return {
+            "note": note,
+            "bsc_summary": {k: len(v) for k, v in bsc_by_aspek.items()},
+            "okr_stats": {
+                "total": len(okr_list),
+                "excellent": sum(1 for o in okr_list if o["status"] == "EXCELLENT"),
+                "on_track": sum(1 for o in okr_list if o["status"] == "ON_TRACK"),
+                "at_risk": len(at_risk),
+                "off_track": len(off_okrs),
+                "avg_progress": round(sum(o["progress"] for o in okr_list) / len(okr_list), 1) if okr_list else 0,
+            },
+            "kpi_ranking": rank[:20],
+            "divisi_ranking": div_rank,
+            "off_track_okrs": off_okrs,
+            "at_risk_okrs": at_risk,
+        }
+
+    @router.put("/evaluation")
+    async def upsert_evaluation(period_id: str, payload: EvaluationUpdate, _: dict = Depends(require_spv)):
+        update = payload.model_dump(exclude_unset=True)
+        update["period_id"] = period_id
+        update["updated_at"] = _now()
+        await db.strategy_evaluations.update_one({"period_id": period_id}, {"$set": update}, upsert=True)
+        return await db.strategy_evaluations.find_one({"period_id": period_id}, {"_id": 0})
 
     # ================================================================
     # KOMITMEN — Surat Kesepakatan Target PDF per Divisi
