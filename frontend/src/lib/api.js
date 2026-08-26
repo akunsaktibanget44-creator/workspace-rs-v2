@@ -28,12 +28,17 @@ export const monitoringWorkload = (params = {}) => api.get("/monitoring/workload
 export const monitoringCompliance = (params = {}) => api.get("/monitoring/amaliyah-compliance", { params }).then((r) => r.data);
 export const monitoringStagnant = (params = {}) => api.get("/monitoring/stagnant-tasks", { params }).then((r) => r.data);
 export const monitoringDivProgress = () => api.get("/monitoring/division-progress").then((r) => r.data);
+export const monitoringUser = (anggotaId, params = {}) => api.get(`/monitoring/user/${anggotaId}`, { params }).then((r) => r.data);
+
+// ============ DASHBOARD ============
+export const dashboardDigest = () => api.get("/dashboard/digest").then((r) => r.data);
 
 // ============ RAPORT PDF ============
-export const raportExportPdfUrl = (start, end) => {
+export const raportExportPdfUrl = (start, end, anggotaId) => {
   const qs = new URLSearchParams();
   if (start) qs.set("start", start);
   if (end) qs.set("end", end);
+  if (anggotaId) qs.set("anggota_id", anggotaId);
   return `${API}/raport/export.pdf${qs.toString() ? `?${qs}` : ""}`;
 };
 
@@ -105,7 +110,7 @@ export const upsertEntry = (p) => api.post("/amaliyah/entries", p).then((r) => r
 
 // Raport
 export const raportSummary = (params = {}) => api.get("/raport/summary", { params }).then((r) => r.data);
-export const updateRaportNote = (p) => api.put("/raport/note", p).then((r) => r.data);
+export const updateRaportNote = (p, params = {}) => api.put("/raport/note", p, { params }).then((r) => r.data);
 
 // Import (kept but hidden from UI)
 export const importExcel = (file) => {

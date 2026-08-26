@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Moon, LogIn, Mail, Lock, Loader2 } from "lucide-react";
+import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth, formatApiErr } from "@/lib/AuthContext";
+import SanadLogo from "@/components/SanadLogo";
 
 export default function Login() {
   const { login, user, loading } = useAuth();
@@ -50,11 +51,9 @@ export default function Login() {
 
       <div className="relative w-full max-w-md">
         <div className="mb-6 flex flex-col items-center">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-900 text-white shadow-lg shadow-emerald-900/30">
-            <Moon size={26} strokeWidth={2} />
-          </div>
-          <h1 className="mt-3 font-display text-2xl font-bold text-emerald-950">Qolbu Manage</h1>
-          <p className="text-xs uppercase tracking-widest text-emerald-700/70">Amal • Kerja • Raport</p>
+          <SanadLogo size={64} />
+          <h1 className="mt-3 font-display text-3xl font-bold text-emerald-950 tracking-tight">Sanad</h1>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-700/70">Amal • Kerja • Raport</p>
         </div>
 
         <div className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-xl shadow-emerald-900/5">

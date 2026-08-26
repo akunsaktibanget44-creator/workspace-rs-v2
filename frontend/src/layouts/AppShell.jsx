@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, ListTodo, HeartHandshake, Award, Moon, Menu, X, Repeat, Activity, Users, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, ListTodo, HeartHandshake, Award, Menu, X, Repeat, Activity, Users, LogOut, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { unreadTasks } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import GlobalSearch from "@/components/GlobalSearch";
+import SanadLogo from "@/components/SanadLogo";
 
 const BASE_NAV = [
   { to: "/", label: "Beranda", icon: LayoutDashboard, testId: "nav-dashboard", end: true },
@@ -25,13 +26,11 @@ function SidebarBody({ onNavigate, unreadTotal, user, onLogout }) {
   return (
     <div className="flex h-full flex-col">
       <div className="mb-4 px-2">
-        <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-900 text-white">
-            <Moon size={18} strokeWidth={2} />
-          </div>
+        <div className="flex items-center gap-2.5">
+          <SanadLogo size={38} />
           <div>
-            <h1 className="font-display text-lg font-bold text-emerald-950 leading-tight">Qolbu Manage</h1>
-            <p className="text-[11px] uppercase tracking-widest text-emerald-700/70">Amal • Kerja • Raport</p>
+            <h1 className="font-display text-xl font-bold text-emerald-950 leading-tight tracking-tight">Sanad</h1>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-700/70">Amal • Kerja • Raport</p>
           </div>
         </div>
       </div>
@@ -120,10 +119,8 @@ export default function AppShell() {
 
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-emerald-100 bg-white/80 px-4 py-3 backdrop-blur-xl md:hidden">
         <div className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-md bg-emerald-900 text-white">
-            <Moon size={16} />
-          </div>
-          <span className="font-display text-base font-bold text-emerald-950">Qolbu Manage</span>
+          <SanadLogo size={30} />
+          <span className="font-display text-base font-bold text-emerald-950">Sanad</span>
         </div>
         <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen((v) => !v)} className="rounded-md p-2 text-emerald-900 hover:bg-emerald-100">
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}

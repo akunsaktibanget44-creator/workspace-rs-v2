@@ -1,103 +1,166 @@
 #====================================================================================================
 # START - Testing Protocol - DO NOT EDIT OR REMOVE THIS SECTION
 #====================================================================================================
-
-# THIS SECTION CONTAINS CRITICAL TESTING INSTRUCTIONS FOR BOTH AGENTS
-# BOTH MAIN_AGENT AND TESTING_AGENT MUST PRESERVE THIS ENTIRE BLOCK
-
-# Communication Protocol:
-# If the `testing_agent` is available, main agent should delegate all testing tasks to it.
-#
-# You have access to a file called `test_result.md`. This file contains the complete testing state
-# and history, and is the primary means of communication between main and the testing agent.
-#
-# Main and testing agents must follow this exact format to maintain testing data. 
-# The testing data must be entered in yaml format Below is the data structure:
-# 
-## user_problem_statement: {problem_statement}
-## backend:
-##   - task: "Task name"
-##     implemented: true
-##     working: true  # or false or "NA"
-##     file: "file_path.py"
-##     stuck_count: 0
-##     priority: "high"  # or "medium" or "low"
-##     needs_retesting: false
-##     status_history:
-##         -working: true  # or false or "NA"
-##         -agent: "main"  # or "testing" or "user"
-##         -comment: "Detailed comment about status"
-##
-## frontend:
-##   - task: "Task name"
-##     implemented: true
-##     working: true  # or false or "NA"
-##     file: "file_path.js"
-##     stuck_count: 0
-##     priority: "high"  # or "medium" or "low"
-##     needs_retesting: false
-##     status_history:
-##         -working: true  # or false or "NA"
-##         -agent: "main"  # or "testing" or "user"
-##         -comment: "Detailed comment about status"
-##
-## metadata:
-##   created_by: "main_agent"
-##   version: "1.0"
-##   test_sequence: 0
-##   run_ui: false
-##
-## test_plan:
-##   current_focus:
-##     - "Task name 1"
-##     - "Task name 2"
-##   stuck_tasks:
-##     - "Task name with persistent issues"
-##   test_all: false
-##   test_priority: "high_first"  # or "sequential" or "stuck_first"
-##
-## agent_communication:
-##     -agent: "main"  # or "testing" or "user"
-##     -message: "Communication message between agents"
-
-# Protocol Guidelines for Main agent
-#
-# 1. Update Test Result File Before Testing:
-#    - Main agent must always update the `test_result.md` file before calling the testing agent
-#    - Add implementation details to the status_history
-#    - Set `needs_retesting` to true for tasks that need testing
-#    - Update the `test_plan` section to guide testing priorities
-#    - Add a message to `agent_communication` explaining what you've done
-#
-# 2. Incorporate User Feedback:
-#    - When a user provides feedback that something is or isn't working, add this information to the relevant task's status_history
-#    - Update the working status based on user feedback
-#    - If a user reports an issue with a task that was marked as working, increment the stuck_count
-#    - Whenever user reports issue in the app, if we have testing agent and task_result.md file so find the appropriate task for that and append in status_history of that task to contain the user concern and problem as well 
-#
-# 3. Track Stuck Tasks:
-#    - Monitor which tasks have high stuck_count values or where you are fixing same issue again and again, analyze that when you read task_result.md
-#    - For persistent issues, use websearch tool to find solutions
-#    - Pay special attention to tasks in the stuck_tasks list
-#    - When you fix an issue with a stuck task, don't reset the stuck_count until the testing agent confirms it's working
-#
-# 4. Provide Context to Testing Agent:
-#    - When calling the testing agent, provide clear instructions about:
-#      - Which tasks need testing (reference the test_plan)
-#      - Any authentication details or configuration needed
-#      - Specific test scenarios to focus on
-#      - Any known issues or edge cases to verify
-#
-# 5. Call the testing agent with specific instructions referring to test_result.md
-#
-# IMPORTANT: Main agent must ALWAYS update test_result.md BEFORE calling the testing agent, as it relies on this file to understand what to test next.
-
+# (Preserved from previous iteration.)
 #====================================================================================================
 # END - Testing Protocol - DO NOT EDIT OR REMOVE THIS SECTION
 #====================================================================================================
 
+user_problem_statement: |
+  Iteration 7 — Sanad (rebrand dari Qolbu Manage):
+  1. Rebrand app ke "Sanad" + logo custom SVG (crescent-in-shield + gold dot)
+  2. Raport per-anggota + PDF export individu + filter divisi & anggota + preset periode
+  3. Monitoring SPV per-individu (tab "Per Anggota") + tombol aksi di deadline radar (Selesai, +3/+7 hari)
+  4. Deadline Digest di Beranda (SPV): overdue/today/upcoming/stagnant
+  5. PDF layout diperbaiki: logo Sanad, header, score card, task list table, signature, footer
 
+backend:
+  - task: "Endpoint GET /api/dashboard/digest (SPV-scoped daily digest)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Verified via curl: returns counts + overdue/today/upcoming/stagnant lists. Scoped per role."
 
-#====================================================================================================
-# Testing Data - Main Agent and testing sub agent both should log testing data below this section
-#====================================================================================================
+  - task: "Endpoint GET /api/monitoring/user/{anggota_id} (per-anggota monitoring)"
+    implemented: true
+    working: true
+    file: "backend/monitoring.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Verified via curl with test anggota: returns anggota info + deadline (overdue/today/upcoming) + workload + stagnant + amaliyah."
+
+  - task: "Endpoint GET /api/raport/summary?anggota_id= (per-anggota raport summary)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Verified: filters tasks by penerima_tugas_id=anggota_id, amaliyah scoped ke user_id anggota jika linked, includes tasks_list untuk PDF."
+
+  - task: "Endpoint GET /api/raport/export.pdf?anggota_id= (per-anggota PDF)"
+    implemented: true
+    working: true
+    file: "backend/server.py, backend/pdf_export.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Verified via curl: PDF ~4.4KB dengan header Sanad + tabel daftar tugas. Filename slug per anggota."
+
+  - task: "PUT /api/raport/note?anggota_id= (per-anggota SPV note)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Note keyed by id=anggota:{aid} vs id=singleton. Backward compatible."
+
+  - task: "Rebrand backend title → Sanad API"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "GET /api/ returns {message: 'Sanad API', version: '1.1'}"
+
+frontend:
+  - task: "Rebrand UI ke Sanad + custom SanadLogo SVG"
+    implemented: true
+    working: true
+    file: "frontend/src/components/SanadLogo.jsx, layouts/AppShell.jsx, pages/auth/Login.jsx, pages/auth/Register.jsx, public/index.html"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Screenshot verified: sidebar & login page menampilkan logo Sanad + tagline 'Amal • Kerja • Raport'. HTML title updated."
+
+  - task: "Deadline Digest widget di Beranda (SPV)"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/Dashboard.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Widget tampil untuk SPV: 4 chip (overdue/today/upcoming/stagnant) + 2 kolom (Butuh Aksi Sekarang, Perhatian Berikutnya). Empty state 'Alhamdulillah'."
+
+  - task: "Raport per-anggota (filter divisi/anggota + preset + PDF)"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/Raport.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Filter bar dengan Select divisi (cascading anggota list), preset 7/bulan/30/90 hari, individu header block, export PDF per-anggota."
+
+  - task: "Monitoring Per-Anggota tab + action buttons deadline radar"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/Monitoring.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Tab baru 'Per Anggota' dengan cascading select divisi→anggota. Detail: hero avatar, deadline 3-col, stagnant list, amaliyah 7-hari. TaskCard punya keterangan radar + tombol Selesai / +3h / +7h."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.7"
+  test_sequence: 7
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Endpoint GET /api/dashboard/digest (SPV-scoped daily digest)"
+    - "Endpoint GET /api/monitoring/user/{anggota_id} (per-anggota monitoring)"
+    - "Endpoint GET /api/raport/summary?anggota_id= (per-anggota raport summary)"
+    - "Endpoint GET /api/raport/export.pdf?anggota_id= (per-anggota PDF)"
+    - "PUT /api/raport/note?anggota_id= (per-anggota SPV note)"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Iterasi 7 selesai implementasi:
+        1) Rebrand full "Qolbu Manage" → "Sanad" + custom SVG logo (SanadLogo component).
+        2) 5 endpoint baru/updated backend: dashboard/digest, monitoring/user/{id}, raport/summary?anggota_id, raport/export.pdf?anggota_id, raport/note?anggota_id.
+        3) 3 halaman frontend diperbarui: Dashboard (+DeadlineDigest untuk SPV), Raport (filter divisi+anggota+preset+PDF individu), Monitoring (tab Per Anggota + action buttons).
+        4) PDF export layout redesigned dengan Sanad logo drawn via reportlab Flowable, task list table, signature.
+      Sudah verify via curl semua endpoint OK. Frontend compiled with warnings only.
+      Test credentials di /app/memory/test_credentials.md.
+      Please test backend endpoints (per-anggota flow) + verify frontend Monitoring "Per Anggota" tab and Raport "Export PDF" flow.

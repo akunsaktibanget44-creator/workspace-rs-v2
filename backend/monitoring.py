@@ -147,4 +147,88 @@ def build_monitoring_router(db: AsyncIOMotorDatabase, get_current_user) -> APIRo
             rows.append({**d, "total": total, "selesai": selesai, "terkendala": terkendala, "overdue": overdue, "pct": pct})
         return {"divisi": rows}
 
+    @router.get("/user/{anggota_id}")
+    async def user_monitoring(anggota_id: str, days: int = 7, _: dict = Depends(get_current_user)):
+        """Combined per-anggota monitoring: deadline radar, workload, amaliyah compliance, stagnant tasks."""
+        ang = await db.anggota.find_one({"id": anggota_id}, {"_id": 0})
+        if not ang:
+            return {"error": "anggota_not_found"}
+        div = await db.divisi.find_one({"id": ang.get("divisi_id")}, {"_id": 0}) if ang.get("divisi_id") else None
+        ang["divisi_nama"] = div.get("nama") if div else "-"
+        ang["divisi_warna"] = div.get("warna") if div else "#059669"
+
+        base = {"penerima_tugas_id": anggota_id, "archived": {"$ne": True}}
+        today = _today()
+        d3 = _days_from_today(3)
+
+        overdue = await db.tasks.find({**base, "status": {"$ne": "SELESAI"}, "deadline": {"$lt": today, "$ne": None}}, {"_id": 0}).sort("deadline", 1).to_list(200)
+        today_tasks = await db.tasks.find({**base, "status": {"$ne": "SELESAI"}, "deadline": today}, {"_id": 0}).to_list(200)
+        upcoming = await db.tasks.find({**base, "status": {"$ne": "SELESAI"}, "deadline": {"$gt": today, "$lte": d3}}, {"_id": 0}).sort("deadline", 1).to_list(200)
+
+        # Workload
+        aktif = await db.tasks.count_documents({**base, "status": {"$ne": "SELESAI"}})
+        selesai = await db.tasks.count_documents({**base, "status": "SELESAI"})
+        proses = await db.tasks.count_documents({**base, "status": "DALAM_PROSES"})
+        kendala = await db.tasks.count_documents({**base, "status": "TERKENDALA"})
+        belum = await db.tasks.count_documents({**base, "status": "BELUM_MULAI"})
+        total = aktif + selesai
+        pct = round(selesai / total * 100, 1) if total else 0
+
+        # Stagnant tasks (user-scoped)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        stg = await db.tasks.find({**base, "status": {"$in": ["BELUM_MULAI", "DALAM_PROSES", "TERKENDALA"]}, "updated_at": {"$lt": cutoff}}, {"_id": 0}).sort("updated_at", 1).to_list(100)
+        stg_out = []
+        for r in stg:
+            try:
+                iso = r["updated_at"].replace("Z", "+00:00") if "Z" in (r.get("updated_at") or "") else r.get("updated_at")
+                hari = (datetime.now(timezone.utc) - datetime.fromisoformat(iso)).days if iso else 0
+            except Exception:
+                hari = 0
+            stg_out.append({**r, "hari_diam": hari})
+
+        # Amaliyah compliance (only if linked to user)
+        amal = {"overall_pct": 0, "items": [], "days": days, "start": "-", "end": "-", "linked": False}
+        if ang.get("user_id"):
+            end_d = date.today()
+            start_d = end_d - timedelta(days=days - 1)
+            items = await db.amaliyah_items.find({}, {"_id": 0}).sort("urutan", 1).to_list(500)
+            entries = await db.amaliyah_entries.find({
+                "tanggal": {"$gte": start_d.isoformat(), "$lte": end_d.isoformat()},
+                "checked": True,
+                "user_id": ang["user_id"],
+            }, {"_id": 0}).to_list(20000)
+            by_item = {}
+            for e in entries:
+                by_item[e["item_id"]] = by_item.get(e["item_id"], 0) + 1
+            arr = []
+            for it in items:
+                done = by_item.get(it["id"], 0)
+                pct_a = round(done / days * 100, 1) if days else 0
+                arr.append({**it, "done": done, "target": days, "pct": pct_a})
+            arr.sort(key=lambda x: x["pct"], reverse=True)
+            total_target = len(items) * days or 1
+            total_done = sum(a["done"] for a in arr)
+            amal = {
+                "overall_pct": round(total_done / total_target * 100, 1),
+                "items": arr,
+                "days": days,
+                "start": start_d.isoformat(),
+                "end": end_d.isoformat(),
+                "linked": True,
+            }
+
+        return {
+            "anggota": ang,
+            "deadline": {
+                "overdue": overdue, "today": today_tasks, "upcoming": upcoming,
+                "summary": {"overdue": len(overdue), "today": len(today_tasks), "upcoming": len(upcoming)},
+            },
+            "workload": {
+                "aktif": aktif, "selesai": selesai, "proses": proses, "kendala": kendala,
+                "belum": belum, "total": total, "pct": pct,
+            },
+            "stagnant": stg_out,
+            "amaliyah": amal,
+        }
+
     return router

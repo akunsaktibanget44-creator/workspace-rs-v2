@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Moon, UserPlus, Loader2 } from "lucide-react";
+import { UserPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth, formatApiErr } from "@/lib/AuthContext";
+import SanadLogo from "@/components/SanadLogo";
 
 export default function Register() {
   const { register } = useAuth();
@@ -50,10 +51,8 @@ export default function Register() {
     <div className="min-h-screen bg-emerald-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-900 text-white shadow-lg">
-            <Moon size={26} />
-          </div>
-          <h1 className="mt-3 font-display text-2xl font-bold text-emerald-950">Daftar Akun</h1>
+          <SanadLogo size={60} />
+          <h1 className="mt-3 font-display text-2xl font-bold text-emerald-950 tracking-tight">Sanad · Daftar</h1>
           <p className="text-xs text-emerald-800/70">Akun baru perlu di-approve SPV.</p>
         </div>
 

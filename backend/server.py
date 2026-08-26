@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, BeforeValidator
 from typing import List, Optional, Annotated, Any
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 import openpyxl
 
 ROOT_DIR = Path(__file__).parent
@@ -25,7 +25,7 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-app = FastAPI(title="Qolbu Manage API")
+app = FastAPI(title="Sanad API")
 api_router = APIRouter(prefix="/api")
 
 get_current_user, require_spv = make_auth_dependencies(db)
@@ -321,7 +321,7 @@ class RaportNoteUpdate(BaseModel):
 # ============ TASK ROUTES ============
 @api_router.get("/")
 async def root():
-    return {"message": "Qolbu Manage API", "version": "1.0"}
+    return {"message": "Sanad API", "version": "1.1"}
 
 
 @api_router.get("/tasks", response_model=List[Task])
@@ -1061,10 +1061,9 @@ async def upsert_entry(payload: AmaliyahEntryCreate, user: dict = Depends(get_cu
 
 
 # ============ RAPORT ROUTES ============
-@api_router.get("/raport/summary")
-async def raport_summary(start: Optional[str] = None, end: Optional[str] = None, user: dict = Depends(get_current_user)):
+async def _raport_summary_impl(start: Optional[str], end: Optional[str], user: dict, anggota_id: Optional[str] = None) -> dict:
     scope = await user_scope(user)
-    # Task score
+    # Task query
     task_query: dict = {}
     if start or end:
         task_query["created_at"] = {}
@@ -1076,25 +1075,26 @@ async def raport_summary(start: Optional[str] = None, end: Optional[str] = None,
     all_tasks = await db.tasks.find(task_query, {"_id": 0}).to_list(5000)
     if not scope["is_spv"]:
         all_tasks = [t for t in all_tasks if t.get("divisi_id") == scope["divisi_id"]] if scope["divisi_id"] else []
+
+    ang = None
+    div_nama = None
+    if anggota_id:
+        ang = await db.anggota.find_one({"id": anggota_id}, {"_id": 0})
+        if ang:
+            all_tasks = [t for t in all_tasks if t.get("penerima_tugas_id") == anggota_id]
+            div = await db.divisi.find_one({"id": ang.get("divisi_id")}, {"_id": 0}) if ang.get("divisi_id") else None
+            div_nama = div.get("nama") if div else None
+
     total = len(all_tasks)
     selesai = sum(1 for t in all_tasks if t.get("status") == "SELESAI")
     dalam_proses = sum(1 for t in all_tasks if t.get("status") == "DALAM_PROSES")
     terkendala = sum(1 for t in all_tasks if t.get("status") == "TERKENDALA")
     belum_mulai = sum(1 for t in all_tasks if t.get("status") == "BELUM_MULAI")
-
-    # Overdue: deadline < today and not selesai
     today = date.today().isoformat()
-    overdue = sum(
-        1
-        for t in all_tasks
-        if t.get("deadline")
-        and t.get("deadline") < today
-        and t.get("status") != "SELESAI"
-    )
-
+    overdue = sum(1 for t in all_tasks if t.get("deadline") and t.get("deadline") < today and t.get("status") != "SELESAI")
     task_score = round((selesai / total * 100) if total else 0, 1)
 
-    # Amaliyah score
+    # Amaliyah
     entry_q: dict = {"checked": True}
     if start or end:
         entry_q["tanggal"] = {}
@@ -1102,12 +1102,16 @@ async def raport_summary(start: Optional[str] = None, end: Optional[str] = None,
             entry_q["tanggal"]["$gte"] = start
         if end:
             entry_q["tanggal"]["$lte"] = end
-    if not scope["is_spv"]:
+    if anggota_id and ang and ang.get("user_id"):
+        entry_q["user_id"] = ang["user_id"]
+    elif anggota_id:
+        # anggota belum di-link → no entries
+        entry_q["user_id"] = "__none__"
+    elif not scope["is_spv"]:
         entry_q["user_id"] = scope["user_id"]
     entries = await db.amaliyah_entries.count_documents(entry_q)
     items_count = await db.amaliyah_items.count_documents({})
 
-    # days in range
     days = 30
     if start and end:
         try:
@@ -1118,10 +1122,7 @@ async def raport_summary(start: Optional[str] = None, end: Optional[str] = None,
             days = 30
     target = items_count * days if items_count else 1
     amaliyah_score = round((entries / target * 100) if target else 0, 1)
-
     combined = round((task_score * 0.6 + amaliyah_score * 0.4), 1)
-
-    # Auto recommendation
     if combined >= 80:
         auto_rec = "REWARD"
     elif combined < 50:
@@ -1129,46 +1130,92 @@ async def raport_summary(start: Optional[str] = None, end: Optional[str] = None,
     else:
         auto_rec = "NETRAL"
 
-    note = await db.raport_notes.find_one({"id": "singleton"}, {"_id": 0}) or {
-        "id": "singleton",
+    note_key = {"id": f"anggota:{anggota_id}"} if anggota_id else {"id": "singleton"}
+    note = await db.raport_notes.find_one(note_key, {"_id": 0}) or {
+        **note_key,
         "catatan_spv": "",
         "rekomendasi": "NETRAL",
         "updated_at": now_iso(),
     }
 
-    return {
-        "task": {
-            "total": total,
-            "selesai": selesai,
-            "dalam_proses": dalam_proses,
-            "terkendala": terkendala,
-            "belum_mulai": belum_mulai,
-            "overdue": overdue,
-            "score": task_score,
-        },
-        "amaliyah": {
-            "total_entries": entries,
-            "target": target,
-            "items_count": items_count,
-            "days": days,
-            "score": amaliyah_score,
-        },
+    result = {
+        "task": {"total": total, "selesai": selesai, "dalam_proses": dalam_proses, "terkendala": terkendala,
+                 "belum_mulai": belum_mulai, "overdue": overdue, "score": task_score},
+        "amaliyah": {"total_entries": entries, "target": target, "items_count": items_count, "days": days, "score": amaliyah_score},
         "combined_score": combined,
         "auto_rekomendasi": auto_rec,
         "spv_note": note,
     }
+    if anggota_id and ang:
+        result["anggota"] = {"id": ang["id"], "nama": ang.get("nama"), "divisi_nama": div_nama}
+        # Include task list for PDF
+        result["tasks_list"] = sorted(all_tasks, key=lambda x: (x.get("deadline") or "9999", x.get("nama") or ""))
+    return result
+
+
+@api_router.get("/raport/summary")
+async def raport_summary(start: Optional[str] = None, end: Optional[str] = None, anggota_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    # RBAC: anggota_id filter is SPV-only (or self, if anggota is linked to current user)
+    if anggota_id:
+        scope = await user_scope(user)
+        if not scope["is_spv"]:
+            own = await db.anggota.find_one({"id": anggota_id, "user_id": user.get("user_id")}, {"_id": 0})
+            if not own:
+                raise HTTPException(403, "Hanya SPV yang bisa melihat raport anggota lain.")
+    return await _raport_summary_impl(start, end, user, anggota_id)
 
 
 @api_router.put("/raport/note")
-async def update_raport_note(payload: RaportNoteUpdate, _: dict = Depends(require_spv)):
+async def update_raport_note(payload: RaportNoteUpdate, anggota_id: Optional[str] = None, _: dict = Depends(require_spv)):
+    key_id = f"anggota:{anggota_id}" if anggota_id else "singleton"
     doc = {
-        "id": "singleton",
+        "id": key_id,
         "catatan_spv": payload.catatan_spv,
         "rekomendasi": payload.rekomendasi,
         "updated_at": now_iso(),
     }
-    await db.raport_notes.update_one({"id": "singleton"}, {"$set": doc}, upsert=True)
+    await db.raport_notes.update_one({"id": key_id}, {"$set": doc}, upsert=True)
     return doc
+
+
+# ============ DASHBOARD DIGEST (SPV) ============
+@api_router.get("/dashboard/digest")
+async def dashboard_digest(user: dict = Depends(get_current_user)):
+    scope = await user_scope(user)
+    today = date.today().isoformat()
+    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    week_ahead = (date.today() + timedelta(days=3)).isoformat()
+
+    base = {"archived": {"$ne": True}, "status": {"$ne": "SELESAI"}}
+    if not scope["is_spv"] and scope["divisi_id"]:
+        base["divisi_id"] = scope["divisi_id"]
+    elif not scope["is_spv"]:
+        return {"overdue": [], "today": [], "upcoming": [], "stagnant": [], "counts": {"overdue": 0, "today": 0, "upcoming": 0, "stagnant": 0}}
+
+    overdue = await db.tasks.find({**base, "deadline": {"$lt": today, "$ne": None}}, {"_id": 0}).sort("deadline", 1).limit(50).to_list(50)
+    today_t = await db.tasks.find({**base, "deadline": today}, {"_id": 0}).limit(50).to_list(50)
+    upcoming = await db.tasks.find({**base, "deadline": {"$gt": today, "$lte": week_ahead}}, {"_id": 0}).sort("deadline", 1).limit(50).to_list(50)
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    stg_q = {**base, "status": {"$in": ["BELUM_MULAI", "DALAM_PROSES", "TERKENDALA"]}, "updated_at": {"$lt": cutoff}}
+    stagnant = await db.tasks.find(stg_q, {"_id": 0}).sort("updated_at", 1).limit(30).to_list(30)
+
+    ang_list = await db.anggota.find({}, {"_id": 0}).to_list(500)
+    ang_map = {a["id"]: a["nama"] for a in ang_list}
+    div_list = await db.divisi.find({}, {"_id": 0}).to_list(200)
+    div_map = {d["id"]: d["nama"] for d in div_list}
+
+    def _dec(rows):
+        return [{**r, "penerima_nama": ang_map.get(r.get("penerima_tugas_id"), r.get("penerima_tugas") or "-"),
+                 "divisi_nama": div_map.get(r.get("divisi_id"), "-")} for r in rows]
+
+    return {
+        "overdue": _dec(overdue),
+        "today": _dec(today_t),
+        "upcoming": _dec(upcoming),
+        "stagnant": _dec(stagnant),
+        "counts": {"overdue": len(overdue), "today": len(today_t), "upcoming": len(upcoming), "stagnant": len(stagnant)},
+    }
 
 
 # ============ EXCEL IMPORT ============
@@ -1357,11 +1404,26 @@ async def import_excel(file: UploadFile = File(...), _: dict = Depends(require_s
 async def export_raport_pdf(
     start: Optional[str] = None,
     end: Optional[str] = None,
+    anggota_id: Optional[str] = None,
     user: dict = Depends(require_spv),
 ):
-    summary = await raport_summary(start=start, end=end, user=user)
-    pdf_bytes = build_raport_pdf(summary, start or "-", end or "-")
-    fname = f"raport-qolbu-{(start or 'all')}_{(end or 'all')}.pdf"
+    summary = await _raport_summary_impl(start, end, user, anggota_id)
+    ang = summary.get("anggota") or {}
+    if anggota_id:
+        subject = f"Raport Individu — {ang.get('nama', '')}"
+        anggota_nama = ang.get("nama")
+        divisi_nama = ang.get("divisi_nama")
+        slug = (ang.get("nama") or "anggota").lower().replace(" ", "-")
+    else:
+        subject = "Raport Kinerja Tim"
+        anggota_nama = None
+        divisi_nama = None
+        slug = "tim"
+    pdf_bytes = build_raport_pdf(
+        summary, start or "-", end or "-",
+        subject=subject, anggota_nama=anggota_nama, divisi_nama=divisi_nama,
+    )
+    fname = f"raport-sanad-{slug}-{(start or 'all')}_{(end or 'all')}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",

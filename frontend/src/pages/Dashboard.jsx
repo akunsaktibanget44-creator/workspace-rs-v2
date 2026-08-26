@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Clock, AlertTriangle, Circle, TrendingUp, Sparkles, CalendarDays, Flame, ArrowRightLeft } from "lucide-react";
-import { raportSummary, listTasks, listEntries, listAmaliyahItems } from "@/lib/api";
+import { CheckCircle2, Clock, AlertTriangle, Circle, TrendingUp, Sparkles, CalendarDays, Flame, ArrowRightLeft, AlarmClock, Zap } from "lucide-react";
+import { raportSummary, listTasks, listEntries, listAmaliyahItems, dashboardDigest } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 
 const STATUS_META = {
@@ -54,6 +54,100 @@ function MiniCard({ icon: Icon, tone, label, value, sub, cta, ctaTo, testId }) {
   );
 }
 
+function DigestRow({ t, tone }) {
+  const tones = {
+    red: "border-red-200 bg-red-50/60 hover:bg-red-50",
+    amber: "border-amber-200 bg-amber-50/60 hover:bg-amber-50",
+    slate: "border-slate-200 bg-slate-50/40 hover:bg-slate-50",
+  };
+  const badge = { red: "bg-red-600 text-white", amber: "bg-amber-500 text-white", slate: "bg-slate-500 text-white" };
+  return (
+    <Link to="/tasks" className={`flex items-start justify-between gap-2 rounded-lg border p-2.5 transition ${tones[tone]}`} data-testid="digest-item">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-emerald-950">{t.nama}</p>
+        <p className="mt-0.5 text-[11px] text-emerald-800/70">
+          {t.divisi_nama} · {t.penerima_nama} · <span className="uppercase">{(t.status || "").replaceAll("_", " ")}</span>
+        </p>
+      </div>
+      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${badge[tone]}`}>{t.deadline || "-"}</span>
+    </Link>
+  );
+}
+
+function DeadlineDigest() {
+  const [d, setD] = useState(null);
+  useEffect(() => { dashboardDigest().then(setD).catch(() => setD({ counts: {}, overdue: [], today: [], upcoming: [], stagnant: [] })); }, []);
+  if (!d) return null;
+  const empty = (d.counts.overdue + d.counts.today + d.counts.upcoming + d.counts.stagnant) === 0;
+
+  return (
+    <section className="rounded-2xl border border-emerald-100 bg-white p-5 md:p-6" data-testid="spv-deadline-digest">
+      <div className="flex items-center gap-2">
+        <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-900 text-white">
+          <AlarmClock size={16} />
+        </div>
+        <div>
+          <h3 className="font-display text-lg font-semibold text-emerald-950">Ringkasan Deadline Harian</h3>
+          <p className="text-[11px] text-emerald-800/60">Digest SPV — task overdue, deadline hari ini, 3 hari ke depan, & task stagnan.</p>
+        </div>
+        <Link to="/monitoring" className="ml-auto text-xs font-medium text-emerald-800 hover:text-emerald-950">
+          Buka Monitoring →
+        </Link>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+        <DigestChip icon={AlertTriangle} label="Overdue" value={d.counts.overdue} tone="red" testId="digest-overdue" />
+        <DigestChip icon={Clock} label="Hari Ini" value={d.counts.today} tone="amber" testId="digest-today" />
+        <DigestChip icon={CalendarDays} label="3 Hari Depan" value={d.counts.upcoming} tone="emerald" testId="digest-upcoming" />
+        <DigestChip icon={Zap} label="Stagnan (>3h)" value={d.counts.stagnant} tone="slate" testId="digest-stagnant" />
+      </div>
+
+      {empty ? (
+        <p className="mt-4 rounded-lg border border-dashed border-emerald-200 p-6 text-center text-sm text-emerald-800/60 italic">
+          Alhamdulillah, tidak ada task yang butuh perhatian.
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-red-800">Butuh Aksi Sekarang</p>
+            <div className="space-y-1.5">
+              {d.overdue.slice(0, 4).map((t) => <DigestRow key={t.id} t={t} tone="red" />)}
+              {d.today.slice(0, 3).map((t) => <DigestRow key={t.id} t={t} tone="amber" />)}
+              {d.overdue.length + d.today.length === 0 && <p className="text-xs text-emerald-800/50 italic">Tidak ada.</p>}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-800">Perhatian Berikutnya</p>
+            <div className="space-y-1.5">
+              {d.upcoming.slice(0, 3).map((t) => <DigestRow key={t.id} t={t} tone="slate" />)}
+              {d.stagnant.slice(0, 3).map((t) => <DigestRow key={t.id} t={t} tone="slate" />)}
+              {d.upcoming.length + d.stagnant.length === 0 && <p className="text-xs text-emerald-800/50 italic">Tidak ada.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DigestChip({ icon: Icon, label, value, tone, testId }) {
+  const tones = {
+    red: "border-red-200 bg-red-50 text-red-900",
+    amber: "border-amber-200 bg-amber-50 text-amber-900",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    slate: "border-slate-200 bg-slate-50 text-slate-900",
+  };
+  return (
+    <div data-testid={testId} className={`rounded-xl border p-3 ${tones[tone]}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wider opacity-80">{label}</p>
+        <Icon size={14} />
+      </div>
+      <p className="font-display mt-1 text-2xl font-bold">{value ?? 0}</p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
@@ -72,7 +166,6 @@ export default function Dashboard() {
       setTodayCount(t); setMovedCount(m);
     }).catch(() => {});
 
-    // Amaliyah streak: last 7 days
     (async () => {
       try {
         const items = await listAmaliyahItems();
@@ -123,38 +216,19 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Mini overview cards - "Ringkasan Beranda" */}
+      {/* SPV DIGEST */}
+      {user?.role === "spv" && <DeadlineDigest />}
+
+      {/* Mini overview cards */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="mini-overview">
-        <MiniCard
-          testId="card-today-tasks"
-          icon={CalendarDays}
-          tone="emerald"
-          label="Hari Ini"
-          value={todayCount}
+        <MiniCard testId="card-today-tasks" icon={CalendarDays} tone="emerald" label="Hari Ini" value={todayCount}
           sub={todayCount === 0 ? "Tidak ada deadline hari ini." : `${todayCount} tugas jatuh tempo hari ini`}
-          cta="Buka Tugas"
-          ctaTo="/tasks"
-        />
-        <MiniCard
-          testId="card-amaliyah-streak"
-          icon={Flame}
-          tone="amber"
-          label="Streak Amaliyah"
-          value={`${amalStreak.pct}%`}
-          sub={`${amalStreak.days}/${amalStreak.target} check-in (7 hari)`}
-          cta="Isi Amaliyah"
-          ctaTo="/spiritual"
-        />
-        <MiniCard
-          testId="card-recent-moves"
-          icon={ArrowRightLeft}
-          tone="violet"
-          label="Pemindahan Baru"
-          value={movedCount}
+          cta="Buka Tugas" ctaTo="/tasks" />
+        <MiniCard testId="card-amaliyah-streak" icon={Flame} tone="amber" label="Streak Amaliyah" value={`${amalStreak.pct}%`}
+          sub={`${amalStreak.days}/${amalStreak.target} check-in (7 hari)`} cta="Isi Amaliyah" ctaTo="/spiritual" />
+        <MiniCard testId="card-recent-moves" icon={ArrowRightLeft} tone="violet" label="Pemindahan Baru" value={movedCount}
           sub={movedCount === 0 ? "Tidak ada pemindahan baru." : `${movedCount} task baru dipindah antar tim`}
-          cta="Lihat"
-          ctaTo="/tasks"
-        />
+          cta="Lihat" ctaTo="/tasks" />
       </section>
 
       {/* Task grid */}
