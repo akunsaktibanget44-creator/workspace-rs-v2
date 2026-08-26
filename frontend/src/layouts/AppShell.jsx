@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, ListTodo, HeartHandshake, Award, Menu, X, Repeat, Activity, Users, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, ListTodo, HeartHandshake, Award, Menu, X, Repeat, Activity, Users, LogOut, ShieldCheck, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
 import { unreadTasks } from "@/lib/api";
@@ -18,6 +18,7 @@ const BASE_NAV = [
 const SPV_NAV = [
   { to: "/raport", label: "Raport", icon: Award, testId: "nav-raport", spvOnly: true },
   { to: "/monitoring", label: "Monitoring SPV", icon: Activity, testId: "nav-monitoring", spvOnly: true },
+  { to: "/strategy", label: "Strategi & Eksekusi", icon: Target, testId: "nav-strategy", spvOnly: true },
   { to: "/users", label: "Manajemen User", icon: Users, testId: "nav-users", spvOnly: true },
 ];
 

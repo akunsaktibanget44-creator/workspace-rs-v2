@@ -1,107 +1,194 @@
 #====================================================================================================
 # START - Testing Protocol - DO NOT EDIT OR REMOVE THIS SECTION
 #====================================================================================================
-# (Preserved from previous iteration.)
+# (Preserved.)
 #====================================================================================================
 # END - Testing Protocol - DO NOT EDIT OR REMOVE THIS SECTION
 #====================================================================================================
 
 user_problem_statement: |
-  Iteration 8 — Rebrand penuh ke "Workspace Ruang Sanad" (dengan logo custom yang di-upload user),
-  perbaiki tampilan PDF export yang masih berantakan (teks overlap, alignment kacau),
-  dan revisi hitungan pekan di menu Tugas Rutin Tracker tab Mingguan agar 1 pekan = Senin–Sabtu
-  (hari operasional, Ahad libur).
+  Iterasi 9 — Tambahkan menu SPV baru "Strategi & Eksekusi" (referensi: Strategi Eksekusi tool):
+  Balanced Scorecard, OKR, KPI, Action Plan, Linimasa. Terintegrasi dengan fitur existing.
+  Requirements khusus (dari user):
+    - Scope MVP: BSC + OKR + KPI + Action Plan + Linimasa (Komitmen/Evaluasi menyusul)
+    - OKR: 1 owner (PIC) + multi supporter. SPV dinamis assign owner via dropdown; anggota tanpa OKR tetap bisa jadi supporter.
+    - KPI: input manual per periode oleh SPV (anggota hanya bisa update 'aktual').
+    - Action Plan: proyek TERHUBUNG ke tasks existing (progress auto dari status task).
+    - Periode dinamis: siklus 2-bulanan / kuartal 3-bulanan / semester / tahunan.
+  UI/UX user-friendly + mobile-friendly.
 
 backend:
-  - task: "Rebrand backend API title ke Workspace Ruang Sanad"
+  - task: "Strategy periods CRUD + activate"
     implemented: true
     working: true
-    file: "backend/server.py"
+    file: "backend/strategy.py, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Endpoints: GET/POST /strategy/periods, GET /strategy/periods/active, PUT/DELETE /strategy/periods/{id}, POST /strategy/periods/{id}/activate. Cascade delete BSC/OKR/KRs/KPI/Projects. Verified via curl: create Q1 2026, active toggle works."
+
+  - task: "BSC CRUD (Balanced Scorecard)"
+    implemented: true
+    working: true
+    file: "backend/strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "GET/POST /strategy/bsc (?period_id=), PUT/DELETE /strategy/bsc/{id}. 4 aspek: FINANCIAL/CUSTOMER/INTERNAL/LEARNING. Verified create with target/achieved."
+
+  - task: "OKR CRUD + Key Results + dynamic owner/supporter assignment"
+    implemented: true
+    working: true
+    file: "backend/strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "GET/POST /strategy/okr with owner_id + supporter_ids[], PUT/DELETE. KR sub-endpoints: POST/PUT/DELETE /strategy/okr/{oid}/keyresults[/{kid}]. Verified: create OKR with owner, add KR, progress % computed from KR target/actual (avg). RBAC: SPV always, owner/supporters can update KR. `/strategy/okr/my` for anggota view. `?anggota_id=` filter (either owner or supporter). Verified 116.7% progress from KR 3/3.5 target/actual."
+
+  - task: "KPI CRUD with weighted scoring (MAX/MIN polaritas)"
+    implemented: true
+    working: true
+    file: "backend/strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "GET/POST /strategy/kpi (?period_id=), PUT/DELETE /strategy/kpi/{id}. Formula: achievement = (aktual/target) for MAX, (target/aktual) for MIN; weighted_score = (ach%/100)*bobot; status EXCELLENT/ON_TRACK/AT_RISK/OFF_TRACK by thresholds 100/80/60. Anggota RBAC: hanya bisa update 'aktual' pada KPI mereka. Optional link ke OKR. Verified: 280M/300M target with bobot 25% → weighted 23.33 (ON_TRACK)."
+
+  - task: "Action Plan (Projects) CRUD + link/unlink tasks + auto progress"
+    implemented: true
+    working: true
+    file: "backend/strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "GET/POST /strategy/projects, PUT/DELETE, POST /projects/{id}/link-tasks {task_ids}, POST /projects/{id}/unlink-task. Response includes: summary (total/selesai/proses/kendala/overdue/pct/status BERJALAN|SELESAI|TERLAMBAT|BELUM_MULAI) computed from linked tasks; start_effective/end_effective derived from linked task min/max dates if not explicit."
+
+  - task: "Strategy dashboard aggregate"
+    implemented: true
+    working: true
+    file: "backend/strategy.py"
     stuck_count: 0
     priority: "medium"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "GET /api/ returns {message: 'Workspace Ruang Sanad API', version: '1.2'}"
-
-  - task: "PDF export layout diperbaiki (fix overlap, embedded PNG logo, uniform metric grid, cleaner signature block)"
-    implemented: true
-    working: true
-    file: "backend/pdf_export.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: false
-        agent: "main"
-        comment: "Sebelumnya inline mixed font sizes di score card menyebabkan text 'RUNGAN' overlap dengan '/100'. Metric cells inconsistent alignment. Signature block awkward spacing."
-      - working: true
-        agent: "main"
-        comment: "Rewrite pdf_export.py: uniform metric cells (rowHeights=[52], 6 kolom task / 5 kolom amaliyah, VALIGN MIDDLE), score card jadi nested table (label→number/slash split→sub) tanpa inline font mix, embedded PNG logo dari /app/backend/assets/ruang_sanad_logo.png via reportlab Image, header 3-kolom (logo | brand | period box), gold divider, proper signature block dengan blank space+underline+label. File size 4KB → 374KB (with embedded logo image). Analyze tool report: 'RAPI' untuk header/tabel/tanda tangan/no-overlap; hanya minor alignment metric (accepted)."
-      - working: true
-        agent: "main"
-        comment: "PDF filename slug diubah dari 'raport-sanad-*' ke 'raport-ruang-sanad-*'."
-
-  - task: "GET /api/ rebrand check (regression from iter 7)"
-    implemented: true
-    working: true
-    file: "backend/server.py"
-    stuck_count: 0
-    priority: "low"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Version bumped 1.1 → 1.2."
+        comment: "GET /strategy/dashboard?period_id= returns bsc_count, okr_count + avg_progress, kpi_count/total_bobot/final_score, project_count/selesai/terlambat. Verified via curl."
 
 frontend:
-  - task: "Ganti logo custom SVG dengan PNG Ruang Sanad yang di-upload"
+  - task: "Menu 'Strategi & Eksekusi' di sidebar (SPV-only) dengan icon Target"
     implemented: true
     working: true
-    file: "frontend/src/components/SanadLogo.jsx, frontend/public/brand/ruang-sanad-logo.png"
+    file: "frontend/src/layouts/AppShell.jsx, App.js"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "PNG di-copy ke /app/frontend/public/brand/ruang-sanad-logo.png. SanadLogo component sekarang render img tag dengan dua variant: 'full' (untuk login/register, tampilkan lockup logo+text) dan 'mark' (untuk sidebar/header mobile, crop calligraphy pakai overflow-hidden + objectPosition top). Screenshot verified: login page tampilkan full logo dengan gold calligraphy + 'RUANG SANAD', sidebar tampilkan calligraphy-only mark."
+        comment: "Route /strategy protected requireSpv. Nav item dengan icon Target added between Monitoring dan Manajemen User. Screenshot verified: sidebar tampilkan menu baru."
 
-  - task: "Rebrand semua string 'Sanad' → 'Workspace Ruang Sanad'"
+  - task: "Strategy page dengan period selector + 6 tabs"
     implemented: true
     working: true
-    file: "frontend/src/layouts/AppShell.jsx, pages/auth/Login.jsx, pages/auth/Register.jsx, public/index.html, pages/Raport.jsx"
+    file: "frontend/src/pages/Strategy.jsx, PeriodDialog.jsx, StrategyOverview.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Sidebar & mobile header: 'Workspace' (teal) + 'Ruang Sanad' (gold). HTML title updated. PDF download filename prefix 'raport-ruang-sanad-'."
+        comment: "Hero teal-gradient dengan Select periode + tombol 'Periode baru' → PeriodDialog (nama, siklus preset 2/3/6/12 bulan, start/end auto, aktif toggle). 6 tabs: Beranda/BSC/OKR/KPI/Action Plan/Linimasa. Empty state kalau belum ada periode. Screenshot verified."
 
-  - task: "Tugas Rutin Tracker Mingguan — hitung pekan Senin–Sabtu (Ahad libur)"
+  - task: "BSC tab: 4-aspek grid dengan CRUD dialog"
     implemented: true
     working: true
-    file: "frontend/src/pages/TugasRutin.jsx"
+    file: "frontend/src/pages/strategy/BscTab.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "weeksInMonth() sekarang skip Sunday (d.getDay()===0) saat iterate hari-hari bulan, sehingga pekan yang hanya berisi Minggu di dalam bulan tidak dihitung. Header pekan tampilkan range tanggal Senin–Sabtu (misal '01/08–01/08') + label 'Sen–Sab' + 'Pekan N'. Screenshot Aug 2026 shows W31-W36 = 6 pekan operasional dengan range Sen-Sab correct."
+        comment: "4 kartu berwarna per aspek (Financial/Customer/Internal/Learning), tombol Tambah per aspek, dialog form nama/target/achieved. Edit inline via dialog."
+
+  - task: "OKR tab: dynamic owner/supporter assign + inline KR editing"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/strategy/OkrTab.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Level tabs (Company/Divisi/Individu) dengan card OKR ekspandable. Dialog form owner dropdown (single, filter by divisi if level=DIVISI) + supporter multi-picker (Popover+Checkbox). KR list inline (Input onBlur autosave). Filter atas: Semua / Tanpa owner / per anggota. Progress bar computed dari KR target/actual."
+
+  - task: "KPI tab: per-anggota summary + editable table + polaritas MAX/MIN"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/strategy/KpiTab.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Grid summary per-anggota (nama, divisi, jumlah KPI, skor, warning kalau bobot ≠ 100%), tabel editable (bobot/target/aktual inline via onBlur), badge status EXCELLENT/ON_TRACK/AT_RISK/OFF_TRACK. Dialog form dengan link ke OKR. Verified UI dengan curl-created KPI Sales."
+
+  - task: "Action Plan tab: proyek dengan link ke tasks existing + progress otomatis"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/strategy/ActionPlanTab.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Card project dengan nama/outcome/OMTM/anggaran/divisi/owner/tim/tanggal, tombol 'Tautkan Task' (multi-select dari tasks existing), tombol lepas per task, progress bar otomatis dari task status. Badge status BERJALAN/SELESAI/TERLAMBAT/BELUM_MULAI."
+
+  - task: "Linimasa tab: Gantt-style timeline proyek"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/strategy/LinimasaTab.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "Header bulan otomatis dari range project. Setiap proyek satu baris dengan bar berwarna sesuai status (sky/emerald/red/slate). Bar clickable, tampilkan tanggal start→end. Empty state kalau tidak ada tanggal."
 
 metadata:
   created_by: "main_agent"
-  version: "1.8"
-  test_sequence: 8
+  version: "1.9"
+  test_sequence: 9
   run_ui: false
 
 test_plan:
   current_focus:
-    - "PDF export layout diperbaiki (fix overlap, embedded PNG logo, uniform metric grid, cleaner signature block)"
-    - "Rebrand backend API title ke Workspace Ruang Sanad"
+    - "Strategy periods CRUD + activate"
+    - "BSC CRUD (Balanced Scorecard)"
+    - "OKR CRUD + Key Results + dynamic owner/supporter assignment"
+    - "KPI CRUD with weighted scoring (MAX/MIN polaritas)"
+    - "Action Plan (Projects) CRUD + link/unlink tasks + auto progress"
+    - "Strategy dashboard aggregate"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -109,9 +196,14 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      Iteration 8 fixes:
-        1) Rebrand full "Sanad" → "Workspace Ruang Sanad" di semua UI text, HTML title, API title, PDF branding, filename slugs (raport-sanad-* → raport-ruang-sanad-*). API version 1.1 → 1.2.
-        2) Logo custom SVG → PNG upload user (calligraphy gold + "RUANG SANAD" text). Dua variant: 'full' (login page) & 'mark' (sidebar, calligraphy crop).
-        3) PDF layout rewrite penuh: no more inline font size mixing (fixes 'RUNGAN' overlap), uniform metric grid (rowHeights, VALIGN), embedded PNG logo via reportlab Image, 3-column header (logo|brand|period box), gold divider, proper signature block. File jadi 374KB (dari 4KB) karena embedded logo image. Analyze tool result: RAPI untuk header, no overlap, tabel rapi, signature rapi (minor metric alignment note only).
-        4) TugasRutin.jsx Mingguan: weeksInMonth() skip Sunday saat iterate → hanya pekan yg punya minimal 1 hari operasional (Sen-Sab) di bulan itu yang dihitung. Header pekan tambah range tanggal Sen-Sab + label "Sen–Sab".
-      Please test backend endpoints untuk PDF (per-anggota + tim) to make sure regression clean, dan verify API title. All previous iter-7 endpoints should still work (regression).
+      Iteration 9 — Strategy & Execution module implemented (BSC/OKR/KPI/Action Plan/Linimasa).
+      Backend: new /app/backend/strategy.py registered under /api/strategy/*. All 6 categories wired.
+      Key business rules to verify:
+        (a) OKR owner_id + supporter_ids[] dynamic assignment — SPV can leave owner empty; anggota can be supporter without being owner.
+        (b) KPI weighted score correct: MAX → aktual/target; MIN → target/aktual. Status thresholds: >=100 EXCELLENT, >=80 ON_TRACK, >=60 AT_RISK, else OFF_TRACK.
+        (c) Anggota RBAC on KPI: 401/403 if editing others' KPI or non-'aktual' fields.
+        (d) Project progress derived from linked task IDs (SELESAI count / total). start_effective from min(tanggal_mulai), end_effective from max(deadline) of linked tasks if not explicit.
+        (e) Cascade delete on period deletion cleans BSC/OKR/KRs/KPI/projects.
+      Base URL: https://sanad-webapp.preview.emergentagent.com/api. SPV creds in /app/memory/test_credentials.md.
+      Frontend compiled with warnings only. Screenshot verified /strategy page renders with hero + tabs + panduan.
+      Please test the 6 backend tasks + regression on iter7/iter8 endpoints. Frontend not requested this round.

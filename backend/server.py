@@ -19,6 +19,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 from auth import build_auth_router, seed_admin, make_auth_dependencies, get_current_user_optional
 from monitoring import build_monitoring_router
+from strategy import build_strategy_router
 from pdf_export import build_raport_pdf
 
 mongo_url = os.environ['MONGO_URL']
@@ -1477,6 +1478,7 @@ async def global_search(q: str = "", user: dict = Depends(get_current_user)):
 # Attach auth & monitoring routers to /api
 api_router.include_router(build_auth_router(db))
 api_router.include_router(build_monitoring_router(db, require_spv))
+api_router.include_router(build_strategy_router(db, get_current_user, require_spv, user_scope))
 
 # Include router
 app.include_router(api_router)

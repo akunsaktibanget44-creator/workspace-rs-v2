@@ -9,6 +9,7 @@ import TugasRutin from "@/pages/TugasRutin";
 import Spiritual from "@/pages/Spiritual";
 import Raport from "@/pages/Raport";
 import Monitoring from "@/pages/Monitoring";
+import Strategy from "@/pages/Strategy";
 import UsersManagement from "@/pages/UsersManagement";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
@@ -33,6 +34,7 @@ function AppRouter() {
         <Route path="/spiritual" element={<Spiritual />} />
         <Route path="/raport" element={<ProtectedRoute requireSpv><Raport /></ProtectedRoute>} />
         <Route path="/monitoring" element={<ProtectedRoute requireSpv><Monitoring /></ProtectedRoute>} />
+        <Route path="/strategy" element={<ProtectedRoute requireSpv><Strategy /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute requireSpv><UsersManagement /></ProtectedRoute>} />
         <Route path="/amaliyah" element={<Navigate to="/spiritual" replace />} />
         <Route path="/import" element={<Navigate to="/tasks" replace />} />

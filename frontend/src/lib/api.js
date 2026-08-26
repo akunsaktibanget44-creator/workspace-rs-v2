@@ -33,6 +33,41 @@ export const monitoringUser = (anggotaId, params = {}) => api.get(`/monitoring/u
 // ============ DASHBOARD ============
 export const dashboardDigest = () => api.get("/dashboard/digest").then((r) => r.data);
 
+// ============ STRATEGY & EXECUTION ============
+export const strategyListPeriods = () => api.get("/strategy/periods").then((r) => r.data);
+export const strategyActivePeriod = () => api.get("/strategy/periods/active").then((r) => r.data);
+export const strategyCreatePeriod = (p) => api.post("/strategy/periods", p).then((r) => r.data);
+export const strategyUpdatePeriod = (id, p) => api.put(`/strategy/periods/${id}`, p).then((r) => r.data);
+export const strategyDeletePeriod = (id) => api.delete(`/strategy/periods/${id}`).then((r) => r.data);
+export const strategyActivatePeriod = (id) => api.post(`/strategy/periods/${id}/activate`).then((r) => r.data);
+
+export const strategyDashboard = (periodId) => api.get("/strategy/dashboard", { params: { period_id: periodId } }).then((r) => r.data);
+
+export const bscList = (periodId) => api.get("/strategy/bsc", { params: { period_id: periodId } }).then((r) => r.data);
+export const bscCreate = (p) => api.post("/strategy/bsc", p).then((r) => r.data);
+export const bscUpdate = (id, p) => api.put(`/strategy/bsc/${id}`, p).then((r) => r.data);
+export const bscDelete = (id) => api.delete(`/strategy/bsc/${id}`).then((r) => r.data);
+
+export const okrList = (periodId, params = {}) => api.get("/strategy/okr", { params: { period_id: periodId, ...params } }).then((r) => r.data);
+export const okrCreate = (p) => api.post("/strategy/okr", p).then((r) => r.data);
+export const okrUpdate = (id, p) => api.put(`/strategy/okr/${id}`, p).then((r) => r.data);
+export const okrDelete = (id) => api.delete(`/strategy/okr/${id}`).then((r) => r.data);
+export const krCreate = (okrId, p) => api.post(`/strategy/okr/${okrId}/keyresults`, p).then((r) => r.data);
+export const krUpdate = (okrId, krId, p) => api.put(`/strategy/okr/${okrId}/keyresults/${krId}`, p).then((r) => r.data);
+export const krDelete = (okrId, krId) => api.delete(`/strategy/okr/${okrId}/keyresults/${krId}`).then((r) => r.data);
+
+export const kpiList = (periodId) => api.get("/strategy/kpi", { params: { period_id: periodId } }).then((r) => r.data);
+export const kpiCreate = (p) => api.post("/strategy/kpi", p).then((r) => r.data);
+export const kpiUpdate = (id, p) => api.put(`/strategy/kpi/${id}`, p).then((r) => r.data);
+export const kpiDelete = (id) => api.delete(`/strategy/kpi/${id}`).then((r) => r.data);
+
+export const projectsList = (periodId) => api.get("/strategy/projects", { params: { period_id: periodId } }).then((r) => r.data);
+export const projectCreate = (p) => api.post("/strategy/projects", p).then((r) => r.data);
+export const projectUpdate = (id, p) => api.put(`/strategy/projects/${id}`, p).then((r) => r.data);
+export const projectDelete = (id) => api.delete(`/strategy/projects/${id}`).then((r) => r.data);
+export const projectLinkTasks = (id, task_ids) => api.post(`/strategy/projects/${id}/link-tasks`, { task_ids }).then((r) => r.data);
+export const projectUnlinkTask = (id, task_ids) => api.post(`/strategy/projects/${id}/unlink-task`, { task_ids }).then((r) => r.data);
+
 // ============ RAPORT PDF ============
 export const raportExportPdfUrl = (start, end, anggotaId) => {
   const qs = new URLSearchParams();
