@@ -30,8 +30,8 @@ function SidebarBody({ onNavigate, unreadTotal, user, onLogout }) {
         <div className="flex items-center gap-3">
           <SanadLogo size={44} variant="mark" />
           <div>
-            <h1 className="font-display text-lg font-bold leading-tight tracking-tight" style={{ color: "#0f4f47" }}>
-              Workspace <span style={{ color: "#c8a24c" }}>Ruang Sanad</span>
+            <h1 className="font-display text-xl font-bold leading-tight tracking-[0.14em]" style={{ color: "#0f4f47" }}>
+              WORKSPACE
             </h1>
             <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-800/60">Amal • Kerja • Raport</p>
           </div>
@@ -123,7 +123,7 @@ export default function AppShell() {
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-emerald-100 bg-white/80 px-4 py-3 backdrop-blur-xl md:hidden">
         <div className="flex items-center gap-2">
           <SanadLogo size={30} variant="mark" />
-          <span className="font-display text-sm font-bold" style={{ color: "#0f4f47" }}>Workspace <span style={{ color: "#c8a24c" }}>Ruang Sanad</span></span>
+          <span className="font-display text-sm font-bold tracking-[0.12em]" style={{ color: "#0f4f47" }}>WORKSPACE</span>
         </div>
         <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen((v) => !v)} className="rounded-md p-2 text-emerald-900 hover:bg-emerald-100">
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}

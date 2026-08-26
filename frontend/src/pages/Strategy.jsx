@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Target, LayoutDashboard, Landmark, Compass, Gauge, Rocket, GanttChart, Plus, Loader2, Settings2 } from "lucide-react";
+import { Target, LayoutDashboard, Landmark, Compass, Gauge, Rocket, GanttChart, Plus, Loader2, Settings2, BookOpen, FileSignature } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,11 +9,13 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import PeriodDialog from "@/pages/strategy/PeriodDialog";
+import VisiMisiTab from "@/pages/strategy/VisiMisiTab";
 import BscTab from "@/pages/strategy/BscTab";
 import OkrTab from "@/pages/strategy/OkrTab";
 import KpiTab from "@/pages/strategy/KpiTab";
 import ActionPlanTab from "@/pages/strategy/ActionPlanTab";
 import LinimasaTab from "@/pages/strategy/LinimasaTab";
+import KomitmenTab from "@/pages/strategy/KomitmenTab";
 import StrategyOverview from "@/pages/strategy/StrategyOverview";
 
 export default function Strategy() {
@@ -134,19 +136,23 @@ export default function Strategy() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="bg-emerald-50 flex-wrap h-auto p-1">
             <TabsTrigger value="beranda" data-testid="strategy-tab-beranda" className="gap-1"><LayoutDashboard size={14} /> Beranda</TabsTrigger>
+            <TabsTrigger value="visi" data-testid="strategy-tab-visi" className="gap-1"><BookOpen size={14} /> Visi &amp; Misi</TabsTrigger>
             <TabsTrigger value="bsc" data-testid="strategy-tab-bsc" className="gap-1"><Landmark size={14} /> BSC</TabsTrigger>
             <TabsTrigger value="okr" data-testid="strategy-tab-okr" className="gap-1"><Compass size={14} /> OKR</TabsTrigger>
             <TabsTrigger value="kpi" data-testid="strategy-tab-kpi" className="gap-1"><Gauge size={14} /> KPI</TabsTrigger>
             <TabsTrigger value="action" data-testid="strategy-tab-action" className="gap-1"><Rocket size={14} /> Action Plan</TabsTrigger>
             <TabsTrigger value="linimasa" data-testid="strategy-tab-linimasa" className="gap-1"><GanttChart size={14} /> Linimasa</TabsTrigger>
+            <TabsTrigger value="komitmen" data-testid="strategy-tab-komitmen" className="gap-1"><FileSignature size={14} /> Komitmen</TabsTrigger>
           </TabsList>
 
           <TabsContent value="beranda"><StrategyOverview periodId={periodId} period={activePeriod} /></TabsContent>
+          <TabsContent value="visi"><VisiMisiTab periodId={periodId} /></TabsContent>
           <TabsContent value="bsc"><BscTab periodId={periodId} /></TabsContent>
           <TabsContent value="okr"><OkrTab periodId={periodId} /></TabsContent>
           <TabsContent value="kpi"><KpiTab periodId={periodId} /></TabsContent>
           <TabsContent value="action"><ActionPlanTab periodId={periodId} /></TabsContent>
           <TabsContent value="linimasa"><LinimasaTab periodId={periodId} /></TabsContent>
+          <TabsContent value="komitmen"><KomitmenTab periodId={periodId} /></TabsContent>
         </Tabs>
       )}
 

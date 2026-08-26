@@ -340,6 +340,13 @@ def test_kpi_rbac_anggota_cannot_update_bobot(anggota_session, kpi):
     assert r.status_code == 403, f"expected 403 got {r.status_code}: {r.text}"
 
 
+def test_kpi_rbac_anggota_cannot_update_bobot_null(anggota_session, kpi):
+    # Iter10 fix: guard uses exclude_unset — sending bobot=null must still be forbidden
+    r = anggota_session.put(f"{API}/strategy/kpi/{kpi['id']}", json={"aktual": 85, "bobot": None})
+    assert r.status_code == 403, f"expected 403 got {r.status_code}: {r.text}"
+
+
+
 def test_kpi_rbac_others_kpi_forbidden(spv, period, anggota_session, seed):
     # create a KPI for a DIFFERENT anggota
     suf = uuid.uuid4().hex[:6]

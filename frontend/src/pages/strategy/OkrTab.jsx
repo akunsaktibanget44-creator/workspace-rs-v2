@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { okrList, okrCreate, okrUpdate, okrDelete, krCreate, krUpdate, krDelete, listAnggota, listDivisi } from "@/lib/api";
+import { okrList, okrCreate, okrUpdate, okrDelete, krCreate, krUpdate, krDelete, listAnggota, listDivisi, bscList } from "@/lib/api";
 
 const LEVELS = [
   { key: "COMPANY", label: "Company (Perusahaan)", tone: "border-emerald-300 bg-emerald-50" },
@@ -22,6 +22,7 @@ export default function OkrTab({ periodId }) {
   const [loading, setLoading] = useState(true);
   const [anggotaList, setAnggotaList] = useState([]);
   const [divisiList, setDivisiList] = useState([]);
+  const [bscListRows, setBscListRows] = useState([]);
   const [openDlg, setOpenDlg] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [filterOwner, setFilterOwner] = useState("ALL");
@@ -30,8 +31,8 @@ export default function OkrTab({ periodId }) {
     if (!periodId) return;
     setLoading(true);
     try {
-      const [o, a, d] = await Promise.all([okrList(periodId), listAnggota(), listDivisi()]);
-      setObjs(o); setAnggotaList(a); setDivisiList(d);
+      const [o, a, d, b] = await Promise.all([okrList(periodId), listAnggota(), listDivisi(), bscList(periodId)]);
+      setObjs(o); setAnggotaList(a); setDivisiList(d); setBscListRows(b);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [periodId]);
@@ -104,7 +105,7 @@ export default function OkrTab({ periodId }) {
         );
       })}
 
-      <OkrDialog open={openDlg} onOpenChange={setOpenDlg} row={editRow} periodId={periodId} anggotaList={anggotaList} divisiList={divisiList} onSaved={load} />
+      <OkrDialog open={openDlg} onOpenChange={setOpenDlg} row={editRow} periodId={periodId} anggotaList={anggotaList} divisiList={divisiList} bscListRows={bscListRows} onSaved={load} />
     </div>
   );
 }
@@ -144,6 +145,11 @@ function OkrCard({ obj, anggotaList, divisiList, onEdit, onDelete, onReload }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-emerald-950">{obj.objective}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-emerald-800/70">
+            {obj.bsc_target && (
+              <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900" title={obj.bsc_target.nama}>
+                <TargetIcon size={10} /> BSC: <b>{(obj.bsc_target.nama || "").slice(0, 30)}</b>
+              </span>
+            )}
             {obj.level === "DIVISI" && obj.divisi && (
               <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 font-medium text-sky-800">
                 <Building2 size={10} /> {obj.divisi.nama}
@@ -212,12 +218,13 @@ function OkrCard({ obj, anggotaList, divisiList, onEdit, onDelete, onReload }) {
   );
 }
 
-function OkrDialog({ open, onOpenChange, row, periodId, anggotaList, divisiList, onSaved }) {
+function OkrDialog({ open, onOpenChange, row, periodId, anggotaList, divisiList, bscListRows, onSaved }) {
   const [level, setLevel] = useState("DIVISI");
   const [divisiId, setDivisiId] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [supporterIds, setSupporterIds] = useState([]);
   const [objective, setObjective] = useState("");
+  const [bscTargetId, setBscTargetId] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -227,6 +234,7 @@ function OkrDialog({ open, onOpenChange, row, periodId, anggotaList, divisiList,
     setOwnerId(row?.owner_id || "");
     setSupporterIds(row?.supporter_ids || []);
     setObjective(row?.objective || "");
+    setBscTargetId(row?.bsc_target_id || "");
   }, [open, row]);
 
   const filteredAnggota = anggotaList.filter((a) => !divisiId || level !== "DIVISI" || a.divisi_id === divisiId);
@@ -240,6 +248,7 @@ function OkrDialog({ open, onOpenChange, row, periodId, anggotaList, divisiList,
         divisi_id: level !== "COMPANY" ? (divisiId || null) : null,
         owner_id: ownerId || null,
         supporter_ids: supporterIds,
+        bsc_target_id: bscTargetId || null,
         urutan: 0,
       };
       if (row?.id) await okrUpdate(row.id, payload);
@@ -251,12 +260,14 @@ function OkrDialog({ open, onOpenChange, row, periodId, anggotaList, divisiList,
     setSaving(false);
   };
 
+  const ASPEK_LABEL = { FINANCIAL: "Financial", CUSTOMER: "Customer", INTERNAL: "Internal", LEARNING: "Learning" };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{row?.id ? "Edit" : "Tambah"} Objective</DialogTitle>
-          <DialogDescription className="text-xs">SPV bisa dinamis memilih siapa yang pegang OKR ini. Anggota tanpa OKR tetap bisa jadi supporter.</DialogDescription>
+          <DialogDescription className="text-xs">Selaraskan OKR dengan target BSC (Balanced Scorecard). SPV pilih owner secara dinamis; anggota lain bisa jadi supporter.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -280,6 +291,23 @@ function OkrDialog({ open, onOpenChange, row, periodId, anggotaList, divisiList,
               </Select>
             </div>
           )}
+
+          <div>
+            <Label className="text-xs flex items-center gap-1"><TargetIcon size={12} /> Selaraskan dengan target BSC</Label>
+            <Select value={bscTargetId || "__none__"} onValueChange={(v) => setBscTargetId(v === "__none__" ? "" : v)}>
+              <SelectTrigger data-testid="okr-form-bsc"><SelectValue placeholder="Pilih target BSC (opsional tapi disarankan)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— tanpa alignment BSC —</SelectItem>
+                {bscListRows.length === 0 && <SelectItem value="__empty__" disabled>Belum ada BSC target. Isi di tab BSC dulu.</SelectItem>}
+                {bscListRows.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    [{ASPEK_LABEL[b.aspek] || b.aspek}] {b.nama.slice(0, 60)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-emerald-700">Setiap OKR sebaiknya diturunkan dari BSC target — biar strategi eksekusi terhubung.</p>
+          </div>
 
           <div>
             <Label className="text-xs">Objective</Label>

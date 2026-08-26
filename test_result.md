@@ -7,30 +7,16 @@
 #====================================================================================================
 
 user_problem_statement: |
-  Iterasi 9 — Tambahkan menu SPV baru "Strategi & Eksekusi" (referensi: Strategi Eksekusi tool):
-  Balanced Scorecard, OKR, KPI, Action Plan, Linimasa. Terintegrasi dengan fitur existing.
-  Requirements khusus (dari user):
-    - Scope MVP: BSC + OKR + KPI + Action Plan + Linimasa (Komitmen/Evaluasi menyusul)
-    - OKR: 1 owner (PIC) + multi supporter. SPV dinamis assign owner via dropdown; anggota tanpa OKR tetap bisa jadi supporter.
-    - KPI: input manual per periode oleh SPV (anggota hanya bisa update 'aktual').
-    - Action Plan: proyek TERHUBUNG ke tasks existing (progress auto dari status task).
-    - Periode dinamis: siklus 2-bulanan / kuartal 3-bulanan / semester / tahunan.
-  UI/UX user-friendly + mobile-friendly.
+  Iterasi 10 — Enhance Strategi & Eksekusi module + branding tweak:
+  (1) Add "Komitmen" tab yang generate Surat Kesepakatan Target PDF per divisi (tanda tangan tim).
+  (2) Sidebar: hilangkan text "Ruang Sanad", biar cuma logo + kata "WORKSPACE".
+  (3) Sempurnakan flow strategi & eksekusi:
+      - Add Visi & Misi (belum ada — jangkar strategi).
+      - Link BSC ↔ OKR (sebelumnya tidak terhubung).
+      - Update Beranda dashboard menampilkan visi + alur (Visi→BSC→OKR→KPI→Action Plan→Komitmen).
 
 backend:
-  - task: "Strategy periods CRUD + activate"
-    implemented: true
-    working: true
-    file: "backend/strategy.py, backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Endpoints: GET/POST /strategy/periods, GET /strategy/periods/active, PUT/DELETE /strategy/periods/{id}, POST /strategy/periods/{id}/activate. Cascade delete BSC/OKR/KRs/KPI/Projects. Verified via curl: create Q1 2026, active toggle works."
-
-  - task: "BSC CRUD (Balanced Scorecard)"
+  - task: "Vision & Mission endpoints (per-period)"
     implemented: true
     working: true
     file: "backend/strategy.py"
@@ -40,9 +26,9 @@ backend:
     status_history:
       - working: true
         agent: "main"
-        comment: "GET/POST /strategy/bsc (?period_id=), PUT/DELETE /strategy/bsc/{id}. 4 aspek: FINANCIAL/CUSTOMER/INTERNAL/LEARNING. Verified create with target/achieved."
+        comment: "GET /strategy/vision?period_id= returns {period_id, visi, misi[], nilai[], updated_at} or default empty. PUT /strategy/vision?period_id= (SPV-only) upserts by period_id. Verified via curl."
 
-  - task: "OKR CRUD + Key Results + dynamic owner/supporter assignment"
+  - task: "OKR ↔ BSC alignment via bsc_target_id"
     implemented: true
     working: true
     file: "backend/strategy.py"
@@ -52,82 +38,46 @@ backend:
     status_history:
       - working: true
         agent: "main"
-        comment: "GET/POST /strategy/okr with owner_id + supporter_ids[], PUT/DELETE. KR sub-endpoints: POST/PUT/DELETE /strategy/okr/{oid}/keyresults[/{kid}]. Verified: create OKR with owner, add KR, progress % computed from KR target/actual (avg). RBAC: SPV always, owner/supporters can update KR. `/strategy/okr/my` for anggota view. `?anggota_id=` filter (either owner or supporter). Verified 116.7% progress from KR 3/3.5 target/actual."
+        comment: "OKR Create/Update models sekarang menerima `bsc_target_id: Optional[str]`. GET /okr response now includes `bsc_target: {id, aspek, nama, target, ...}` decoration (joined from bsc_targets by IDs, batched). Backwards-compatible (nullable)."
 
-  - task: "KPI CRUD with weighted scoring (MAX/MIN polaritas)"
+  - task: "Komitmen PDF endpoint — Surat Kesepakatan per Divisi"
     implemented: true
     working: true
-    file: "backend/strategy.py"
+    file: "backend/strategy.py, backend/komitmen_pdf.py"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "GET/POST /strategy/kpi (?period_id=), PUT/DELETE /strategy/kpi/{id}. Formula: achievement = (aktual/target) for MAX, (target/aktual) for MIN; weighted_score = (ach%/100)*bobot; status EXCELLENT/ON_TRACK/AT_RISK/OFF_TRACK by thresholds 100/80/60. Anggota RBAC: hanya bisa update 'aktual' pada KPI mereka. Optional link ke OKR. Verified: 280M/300M target with bobot 25% → weighted 23.33 (ON_TRACK)."
-
-  - task: "Action Plan (Projects) CRUD + link/unlink tasks + auto progress"
-    implemented: true
-    working: true
-    file: "backend/strategy.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "GET/POST /strategy/projects, PUT/DELETE, POST /projects/{id}/link-tasks {task_ids}, POST /projects/{id}/unlink-task. Response includes: summary (total/selesai/proses/kendala/overdue/pct/status BERJALAN|SELESAI|TERLAMBAT|BELUM_MULAI) computed from linked tasks; start_effective/end_effective derived from linked task min/max dates if not explicit."
-
-  - task: "Strategy dashboard aggregate"
-    implemented: true
-    working: true
-    file: "backend/strategy.py"
-    stuck_count: 0
-    priority: "medium"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "GET /strategy/dashboard?period_id= returns bsc_count, okr_count + avg_progress, kpi_count/total_bobot/final_score, project_count/selesai/terlambat. Verified via curl."
+        comment: "GET /strategy/komitmen.pdf?period_id=&divisi_id= (SPV-only) generates PDF with: header logo, judul + divisi + periode, Visi & Misi + Nilai, tabel BSC targets, blok OKR + Key Results (DIVISI + COMPANY level untuk divisi tsb), tabel KPI anggota divisi tsb, 4-point pernyataan komitmen, grid tanda tangan tim (2 kolom, blank space + garis + nama), blok Mengetahui SPV / Menyetujui PIC Divisi. Analyze tool result: ALL SECTIONS present and RAPI. File ~374KB (logo embedded). Filename slug per divisi + periode."
 
 frontend:
-  - task: "Menu 'Strategi & Eksekusi' di sidebar (SPV-only) dengan icon Target"
+  - task: "Sidebar rebrand: only 'WORKSPACE' text (hide 'Ruang Sanad')"
     implemented: true
     working: true
-    file: "frontend/src/layouts/AppShell.jsx, App.js"
+    file: "frontend/src/layouts/AppShell.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Route /strategy protected requireSpv. Nav item dengan icon Target added between Monitoring dan Manajemen User. Screenshot verified: sidebar tampilkan menu baru."
+        comment: "Sidebar & mobile header sekarang: logo + 'WORKSPACE' (tracking 0.14em, teal-dark), + tagline 'Amal • Kerja • Raport'. 'Ruang Sanad' text dihapus. Screenshot verified."
 
-  - task: "Strategy page dengan period selector + 6 tabs"
+  - task: "Visi & Misi tab (fondasi strategi)"
     implemented: true
     working: true
-    file: "frontend/src/pages/Strategy.jsx, PeriodDialog.jsx, StrategyOverview.jsx"
+    file: "frontend/src/pages/strategy/VisiMisiTab.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Hero teal-gradient dengan Select periode + tombol 'Periode baru' → PeriodDialog (nama, siklus preset 2/3/6/12 bulan, start/end auto, aktif toggle). 6 tabs: Beranda/BSC/OKR/KPI/Action Plan/Linimasa. Empty state kalau belum ada periode. Screenshot verified."
+        comment: "Tab baru dengan card visi (Textarea), misi (list of Input, add/delete), nilai (grid 2-col dengan Sparkles icon). Tombol Simpan panggil PUT /strategy/vision. Anchor banner amber."
 
-  - task: "BSC tab: 4-aspek grid dengan CRUD dialog"
-    implemented: true
-    working: true
-    file: "frontend/src/pages/strategy/BscTab.jsx"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "4 kartu berwarna per aspek (Financial/Customer/Internal/Learning), tombol Tambah per aspek, dialog form nama/target/achieved. Edit inline via dialog."
-
-  - task: "OKR tab: dynamic owner/supporter assign + inline KR editing"
+  - task: "OKR-BSC alignment picker + card badge"
     implemented: true
     working: true
     file: "frontend/src/pages/strategy/OkrTab.jsx"
@@ -137,58 +87,55 @@ frontend:
     status_history:
       - working: true
         agent: "main"
-        comment: "Level tabs (Company/Divisi/Individu) dengan card OKR ekspandable. Dialog form owner dropdown (single, filter by divisi if level=DIVISI) + supporter multi-picker (Popover+Checkbox). KR list inline (Input onBlur autosave). Filter atas: Semua / Tanpa owner / per anggota. Progress bar computed dari KR target/actual."
+        comment: "OkrTab load BSC list (parallel). Dialog OKR sekarang punya Select 'Selaraskan dengan target BSC' (opsional, format '[Aspek] Nama Target'). Card OKR tampilkan badge amber 'BSC: [nama]' bila ada bsc_target_id. Empty BSC = disabled option 'Isi BSC dulu'."
 
-  - task: "KPI tab: per-anggota summary + editable table + polaritas MAX/MIN"
+  - task: "Komitmen tab: divisi picker + preview + download PDF"
     implemented: true
     working: true
-    file: "frontend/src/pages/strategy/KpiTab.jsx"
+    file: "frontend/src/pages/strategy/KomitmenTab.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Grid summary per-anggota (nama, divisi, jumlah KPI, skor, warning kalau bobot ≠ 100%), tabel editable (bobot/target/aktual inline via onBlur), badge status EXCELLENT/ON_TRACK/AT_RISK/OFF_TRACK. Dialog form dengan link ke OKR. Verified UI dengan curl-created KPI Sales."
+        comment: "Divisi select + tombol Download PDF (call komitmenPdfUrl + fetch as blob). Preview grid 4 kartu (Visi Misi/BSC/OKR/KPI dengan status Terisi/Perlu isi) + list anggota tim yg akan menandatangani. Empty state kalau divisi belum punya anggota."
 
-  - task: "Action Plan tab: proyek dengan link ke tasks existing + progress otomatis"
+  - task: "Strategy Overview: vision banner + flow diagram (Visi→BSC→OKR→KPI→Action Plan→Komitmen)"
     implemented: true
     working: true
-    file: "frontend/src/pages/strategy/ActionPlanTab.jsx"
+    file: "frontend/src/pages/strategy/StrategyOverview.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Card project dengan nama/outcome/OMTM/anggaran/divisi/owner/tim/tanggal, tombol 'Tautkan Task' (multi-select dari tasks existing), tombol lepas per task, progress bar otomatis dari task status. Badge status BERJALAN/SELESAI/TERLAMBAT/BELUM_MULAI."
+        comment: "Beranda dashboard sekarang: banner Visi (quote italic + nilai chips) kalau ada, warning 'belum diisi' kalau kosong. Flow diagram 6-step dengan arrow. Panduan text updated menjelaskan alignment BSC↔OKR. Screenshot verified."
 
-  - task: "Linimasa tab: Gantt-style timeline proyek"
+  - task: "Strategy.jsx: add Visi & Misi + Komitmen tabs"
     implemented: true
     working: true
-    file: "frontend/src/pages/strategy/LinimasaTab.jsx"
+    file: "frontend/src/pages/Strategy.jsx"
     stuck_count: 0
     priority: "medium"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Header bulan otomatis dari range project. Setiap proyek satu baris dengan bar berwarna sesuai status (sky/emerald/red/slate). Bar clickable, tampilkan tanggal start→end. Empty state kalau tidak ada tanggal."
+        comment: "8 tabs sekarang: Beranda | Visi & Misi | BSC | OKR | KPI | Action Plan | Linimasa | Komitmen. Icon BookOpen dan FileSignature added."
 
 metadata:
   created_by: "main_agent"
-  version: "1.9"
-  test_sequence: 9
+  version: "1.10"
+  test_sequence: 10
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Strategy periods CRUD + activate"
-    - "BSC CRUD (Balanced Scorecard)"
-    - "OKR CRUD + Key Results + dynamic owner/supporter assignment"
-    - "KPI CRUD with weighted scoring (MAX/MIN polaritas)"
-    - "Action Plan (Projects) CRUD + link/unlink tasks + auto progress"
-    - "Strategy dashboard aggregate"
+    - "Vision & Mission endpoints (per-period)"
+    - "OKR ↔ BSC alignment via bsc_target_id"
+    - "Komitmen PDF endpoint — Surat Kesepakatan per Divisi"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -196,14 +143,13 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      Iteration 9 — Strategy & Execution module implemented (BSC/OKR/KPI/Action Plan/Linimasa).
-      Backend: new /app/backend/strategy.py registered under /api/strategy/*. All 6 categories wired.
-      Key business rules to verify:
-        (a) OKR owner_id + supporter_ids[] dynamic assignment — SPV can leave owner empty; anggota can be supporter without being owner.
-        (b) KPI weighted score correct: MAX → aktual/target; MIN → target/aktual. Status thresholds: >=100 EXCELLENT, >=80 ON_TRACK, >=60 AT_RISK, else OFF_TRACK.
-        (c) Anggota RBAC on KPI: 401/403 if editing others' KPI or non-'aktual' fields.
-        (d) Project progress derived from linked task IDs (SELESAI count / total). start_effective from min(tanggal_mulai), end_effective from max(deadline) of linked tasks if not explicit.
-        (e) Cascade delete on period deletion cleans BSC/OKR/KRs/KPI/projects.
+      Iteration 10 additions on top of Strategy module (iter 9):
+        1) NEW backend collection `strategy_vision` — GET/PUT /api/strategy/vision?period_id= (SPV-only PUT).
+        2) OKR model updated: `bsc_target_id: Optional[str]`. GET /okr response now includes `bsc_target` object (batched lookup, no N+1).
+        3) NEW `/api/strategy/komitmen.pdf?period_id=&divisi_id=` (SPV-only) — PDF Surat Kesepakatan per Divisi.
+      Testing focus:
+        - PUT /vision idempotent upsert (create then update, same period_id merges).
+        - OKR bsc_target_id: create OKR with bsc_target_id → response includes decorated bsc_target block; update to null → block removed.
+        - Komitmen PDF: SPV can GET → returns application/pdf > 100KB (with logo). Missing period/divisi → 404. Non-SPV → 403. Empty divisi (0 anggota) → still returns PDF (member section empty but rest OK).
+      Regression: iter7/8/9 endpoints still work. Verify /api/ still returns 'Workspace Ruang Sanad API' v1.2.
       Base URL: https://sanad-webapp.preview.emergentagent.com/api. SPV creds in /app/memory/test_credentials.md.
-      Frontend compiled with warnings only. Screenshot verified /strategy page renders with hero + tabs + panduan.
-      Please test the 6 backend tasks + regression on iter7/iter8 endpoints. Frontend not requested this round.

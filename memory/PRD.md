@@ -9,7 +9,35 @@
 - **SPV / Admin**: Approve user baru, atur role & link anggota, monitor deadline & beban kerja, export raport (tim & individu), review keputusan, kelola Strategi & Eksekusi (BSC/OKR/KPI/Action Plan).
 - **Anggota**: Isi/update tugas divisi mereka, tracker amaliyah pribadi, tracker rutin pribadi, update aktual KPI mereka, kontribusi KR sebagai owner/supporter OKR.
 
-## Iterasi 9 (Feb 2026) — Strategi & Eksekusi Module
+## Iterasi 10 (Feb 2026) — Vision/Mission + BSC↔OKR link + Komitmen PDF + Sidebar rebrand
+
+### 1. Sidebar rebrand
+- Hapus text "Ruang Sanad" — cukup logo + kata "WORKSPACE" (tracking 0.14em, teal-dark).
+
+### 2. Visi & Misi (Fondasi Strategi)
+- Collection baru `strategy_vision` — 1 doc per periode.
+- Endpoints `/api/strategy/vision?period_id=` (GET semua, PUT SPV-only upsert).
+- Tab baru "Visi & Misi" di Strategy (setelah Beranda, sebelum BSC).
+
+### 3. BSC ↔ OKR alignment
+- OKR model tambah `bsc_target_id: Optional[str]`. GET /okr sekarang include decorated `bsc_target` object (batched lookup).
+- Dialog OKR: dropdown "Selaraskan dengan target BSC" (format `[Aspek] Nama Target`). Card OKR tampilkan badge amber "BSC: [nama]".
+
+### 4. Komitmen PDF (Surat Kesepakatan Target)
+- New `/app/backend/komitmen_pdf.py` — PDF builder dengan header logo, judul + divisi + periode, blok Visi & Misi + Nilai, tabel BSC, blok OKR + Key Results, tabel KPI anggota, 4-poin pernyataan komitmen, grid tanda tangan 2-kolom per-anggota, blok Mengetahui SPV + Menyetujui PIC Divisi.
+- Endpoint `GET /api/strategy/komitmen.pdf?period_id=&divisi_id=` (SPV-only).
+- Tab baru "Komitmen" di Strategy dengan divisi picker, preview 4-card status (visi/BSC/OKR/KPI: Terisi/Perlu isi), list anggota yang akan tandatangan, tombol download PDF.
+
+### 5. Strategy Overview updated
+- Banner Visi (quote italic) + nilai chips di bagian atas kalau ada visi.
+- Warning "Visi & Misi belum diisi" kalau kosong.
+- Diagram alur 6-step: Visi & Misi → BSC → OKR → KPI → Action Plan → Komitmen (dengan arrow).
+
+### 6. RCA bug: PUT handlers explicit null unset
+- Sebelumnya semua PUT handler pakai `{k:v for k,v in payload.model_dump().items() if v is not None}` → drop explicit null.
+- Consequence: PUT /okr/{id} {bsc_target_id: null} TIDAK unset link, karena field null di-drop sebelum $set.
+- Fix: 7 update handlers (period/bsc/okr/kr/kpi/project) sekarang pakai `model_dump(exclude_unset=True)` — Pydantic v2 `model_fields_set` respected → field yang sengaja di-null pass through; field yang tidak dikirim tetap di-exclude. KPI anggota RBAC guard juga tightened dengan exclude_unset.
+
 
 ### 1. Menu baru "Strategi & Eksekusi" (SPV-only)
 - Route `/strategy`, icon `Target`, nav item baru di antara Monitoring & Manajemen User.

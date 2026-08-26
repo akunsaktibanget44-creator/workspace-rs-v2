@@ -2,17 +2,22 @@
 
 Collections used (all UUID id, no ObjectId leakage):
 - strategy_periods: {id, nama, start, end, active, siklus_bulan}
+- strategy_vision: {period_id, visi, misi[], nilai[], updated_at}
 - bsc_targets: {id, period_id, aspek, nama, target, achieved, urutan}
-- okr_objectives: {id, period_id, level (COMPANY|DIVISI|INDIVIDU), divisi_id?, owner_id?, supporter_ids[], objective, urutan}
+- okr_objectives: {id, period_id, level (COMPANY|DIVISI|INDIVIDU), divisi_id?, owner_id?, supporter_ids[], objective, bsc_target_id?, urutan}
 - okr_keyresults: {id, objective_id, nama, target, actual, urutan}
 - kpi_items: {id, period_id, anggota_id, indikator, polaritas (MAX|MIN), bobot, target, aktual, okr_id?, urutan}
 - strategy_projects: {id, period_id, nama, outcome, omtm, anggaran, divisi_id?, owner_id?, tim_ids[], task_ids[], start, end}
 """
+import io
 import uuid
 from datetime import datetime, timezone, date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
+
+from komitmen_pdf import build_komitmen_pdf
 
 
 def _now() -> str:
@@ -61,6 +66,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
         owner_id: Optional[str] = None  # anggota_id (dynamic — SPV picks who holds this OKR)
         supporter_ids: List[str] = Field(default_factory=list)
         objective: str
+        bsc_target_id: Optional[str] = None  # link to BSC strategic target (BSC → OKR alignment)
         urutan: int = 0
 
     class OkrUpdate(BaseModel):
@@ -70,6 +76,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
         owner_id: Optional[str] = None
         supporter_ids: Optional[List[str]] = None
         objective: Optional[str] = None
+        bsc_target_id: Optional[str] = None
         urutan: Optional[int] = None
 
     class KrCreate(BaseModel):
@@ -201,7 +208,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
 
     @router.put("/periods/{pid}")
     async def update_period(pid: str, payload: PeriodUpdate, _: dict = Depends(require_spv)):
-        update = {k: v for k, v in payload.model_dump().items() if v is not None}
+        update = payload.model_dump(exclude_unset=True)
         if update.get("active"):
             await db.strategy_periods.update_many({"id": {"$ne": pid}}, {"$set": {"active": False}})
         result = await db.strategy_periods.find_one_and_update(
@@ -252,7 +259,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
 
     @router.put("/bsc/{bid}")
     async def update_bsc(bid: str, payload: BscUpdate, _: dict = Depends(require_spv)):
-        update = {k: v for k, v in payload.model_dump().items() if v is not None}
+        update = payload.model_dump(exclude_unset=True)
         r = await db.bsc_targets.find_one_and_update({"id": bid}, {"$set": update}, return_document=True, projection={"_id": 0})
         if not r:
             raise HTTPException(404, "BSC target tidak ditemukan.")
@@ -279,6 +286,12 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
             by_obj.setdefault(k["objective_id"], []).append(k)
         ang_map = await _decorate_anggota_map()
         div_map = await _decorate_divisi_map()
+        # BSC map (for link decoration)
+        bsc_ids = list({o.get("bsc_target_id") for o in objs if o.get("bsc_target_id")})
+        bsc_map = {}
+        if bsc_ids:
+            bsc_rows = await db.bsc_targets.find({"id": {"$in": bsc_ids}}, {"_id": 0}).to_list(500)
+            bsc_map = {b["id"]: b for b in bsc_rows}
         result = []
         for o in objs:
             kr_list = by_obj.get(o["id"], [])
@@ -298,6 +311,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
             owner = ang_map.get(o.get("owner_id")) if o.get("owner_id") else None
             supporters = [ang_map[i] for i in (o.get("supporter_ids") or []) if i in ang_map]
             divisi = div_map.get(o.get("divisi_id")) if o.get("divisi_id") else None
+            bsc = bsc_map.get(o.get("bsc_target_id")) if o.get("bsc_target_id") else None
             result.append({
                 **o,
                 "key_results": kr_list,
@@ -305,6 +319,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
                 "owner": owner,
                 "supporters": supporters,
                 "divisi": divisi,
+                "bsc_target": bsc,
             })
         return result
 
@@ -329,7 +344,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
 
     @router.put("/okr/{oid}")
     async def update_okr(oid: str, payload: OkrUpdate, _: dict = Depends(require_spv)):
-        update = {k: v for k, v in payload.model_dump().items() if v is not None}
+        update = payload.model_dump(exclude_unset=True)
         r = await db.okr_objectives.find_one_and_update({"id": oid}, {"$set": update}, return_document=True, projection={"_id": 0})
         if not r:
             raise HTTPException(404, "Objective tidak ditemukan.")
@@ -370,7 +385,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
             my_id = await _my_anggota_id(user)
             if my_id is None or (obj.get("owner_id") != my_id and my_id not in (obj.get("supporter_ids") or [])):
                 raise HTTPException(403, "Hanya SPV, owner atau supporter yang bisa update KR.")
-        update = {k: v for k, v in payload.model_dump().items() if v is not None}
+        update = payload.model_dump(exclude_unset=True)
         r = await db.okr_keyresults.find_one_and_update({"id": kid, "objective_id": oid}, {"$set": update}, return_document=True, projection={"_id": 0})
         if not r:
             raise HTTPException(404, "Key Result tidak ditemukan.")
@@ -430,12 +445,12 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
             my_id = await _my_anggota_id(user)
             if my_id is None or kpi.get("anggota_id") != my_id:
                 raise HTTPException(403, "Bukan KPI Anda.")
-            # only `aktual` allowed — reject requests that include any other field
-            payload_dict = payload.model_dump()
-            forbidden = [k for k, v in payload_dict.items() if k != "aktual" and v is not None]
+            # only `aktual` allowed — reject requests that include any other field (even null unset attempts)
+            payload_set = payload.model_dump(exclude_unset=True)
+            forbidden = [k for k in payload_set.keys() if k != "aktual"]
             if forbidden:
                 raise HTTPException(403, f"Anggota hanya boleh update kolom 'aktual'. Ditolak: {', '.join(forbidden)}")
-        update = {k: v for k, v in payload.model_dump().items() if v is not None}
+        update = payload.model_dump(exclude_unset=True)
         r = await db.kpi_items.find_one_and_update({"id": kid}, {"$set": update}, return_document=True, projection={"_id": 0})
         return r
 
@@ -505,7 +520,7 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
 
     @router.put("/projects/{pid}")
     async def update_project(pid: str, payload: ProjectUpdate, _: dict = Depends(require_spv)):
-        update = {k: v for k, v in payload.model_dump().items() if v is not None}
+        update = payload.model_dump(exclude_unset=True)
         r = await db.strategy_projects.find_one_and_update({"id": pid}, {"$set": update}, return_document=True, projection={"_id": 0})
         if not r:
             raise HTTPException(404, "Proyek tidak ditemukan.")
@@ -603,5 +618,82 @@ def build_strategy_router(db, get_current_user, require_spv, user_scope):
             "project_selesai": proj_selesai,
             "project_terlambat": proj_terlambat,
         }
+
+    # ================================================================
+    # VISI & MISI (per period — anchor of strategy execution)
+    # ================================================================
+    class VisionUpdate(BaseModel):
+        model_config = ConfigDict(extra="ignore")
+        visi: Optional[str] = None
+        misi: Optional[List[str]] = None
+        nilai: Optional[List[str]] = None  # core values (optional)
+
+    @router.get("/vision")
+    async def get_vision(period_id: str, _: dict = Depends(get_current_user)):
+        row = await db.strategy_vision.find_one({"period_id": period_id}, {"_id": 0})
+        return row or {"period_id": period_id, "visi": "", "misi": [], "nilai": []}
+
+    @router.put("/vision")
+    async def upsert_vision(period_id: str, payload: VisionUpdate, _: dict = Depends(require_spv)):
+        update = payload.model_dump(exclude_unset=True)
+        update["updated_at"] = _now()
+        update["period_id"] = period_id
+        await db.strategy_vision.update_one({"period_id": period_id}, {"$set": update}, upsert=True)
+        return await db.strategy_vision.find_one({"period_id": period_id}, {"_id": 0})
+
+    # ================================================================
+    # KOMITMEN — Surat Kesepakatan Target PDF per Divisi
+    # ================================================================
+    @router.get("/komitmen.pdf")
+    async def komitmen_pdf(period_id: str, divisi_id: str, _: dict = Depends(require_spv)):
+        period = await db.strategy_periods.find_one({"id": period_id}, {"_id": 0})
+        if not period:
+            raise HTTPException(404, "Periode tidak ditemukan.")
+        divisi = await db.divisi.find_one({"id": divisi_id}, {"_id": 0})
+        if not divisi:
+            raise HTTPException(404, "Divisi tidak ditemukan.")
+        vision = await db.strategy_vision.find_one({"period_id": period_id}, {"_id": 0}) or {}
+        bsc = await db.bsc_targets.find({"period_id": period_id}, {"_id": 0}).sort([("aspek", 1), ("urutan", 1)]).to_list(500)
+        # OKR for this division (DIVISI level + INDIVIDU level in this division)
+        okr_raw = await db.okr_objectives.find(
+            {"period_id": period_id, "$or": [{"divisi_id": divisi_id}, {"level": "COMPANY"}]},
+            {"_id": 0},
+        ).sort([("level", 1), ("urutan", 1)]).to_list(500)
+        oids = [o["id"] for o in okr_raw]
+        krs = await db.okr_keyresults.find({"objective_id": {"$in": oids}}, {"_id": 0}).sort("urutan", 1).to_list(2000)
+        by_obj: dict = {}
+        for k in krs:
+            by_obj.setdefault(k["objective_id"], []).append(k)
+        ang_map = await _decorate_anggota_map()
+        okr_items = []
+        for o in okr_raw:
+            okr_items.append({
+                **o,
+                "key_results": by_obj.get(o["id"], []),
+                "owner": ang_map.get(o.get("owner_id")) if o.get("owner_id") else None,
+                "supporters": [ang_map[i] for i in (o.get("supporter_ids") or []) if i in ang_map],
+            })
+        # Members of this division
+        members = await db.anggota.find({"divisi_id": divisi_id}, {"_id": 0}).sort("nama", 1).to_list(500)
+        mem_ids = [m["id"] for m in members]
+        # KPI for this division's members
+        kpi_raw = await db.kpi_items.find({"period_id": period_id, "anggota_id": {"$in": mem_ids}}, {"_id": 0}).sort("urutan", 1).to_list(1000)
+        kpi_items = []
+        for k in kpi_raw:
+            ang = ang_map.get(k.get("anggota_id"))
+            kpi_items.append({**k, "anggota_nama": ang.get("nama") if ang else "-"})
+
+        pdf_bytes = build_komitmen_pdf(
+            period=period, divisi=divisi, vision=vision,
+            bsc_items=bsc, okr_items=okr_items, kpi_items=kpi_items,
+            members=members,
+        )
+        slug = (divisi.get("nama") or "divisi").lower().replace(" ", "-")
+        fname = f"komitmen-{slug}-{period.get('nama', 'periode').lower().replace(' ', '-')}.pdf"
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        )
 
     return router

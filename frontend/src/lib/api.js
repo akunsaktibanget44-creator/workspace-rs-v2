@@ -43,6 +43,13 @@ export const strategyActivatePeriod = (id) => api.post(`/strategy/periods/${id}/
 
 export const strategyDashboard = (periodId) => api.get("/strategy/dashboard", { params: { period_id: periodId } }).then((r) => r.data);
 
+// Vision/Mission
+export const visionGet = (periodId) => api.get("/strategy/vision", { params: { period_id: periodId } }).then((r) => r.data);
+export const visionUpsert = (periodId, p) => api.put("/strategy/vision", p, { params: { period_id: periodId } }).then((r) => r.data);
+
+// Komitmen PDF URL builder
+export const komitmenPdfUrl = (periodId, divisiId) => `${API}/strategy/komitmen.pdf?period_id=${periodId}&divisi_id=${divisiId}`;
+
 export const bscList = (periodId) => api.get("/strategy/bsc", { params: { period_id: periodId } }).then((r) => r.data);
 export const bscCreate = (p) => api.post("/strategy/bsc", p).then((r) => r.data);
 export const bscUpdate = (id, p) => api.put(`/strategy/bsc/${id}`, p).then((r) => r.data);
