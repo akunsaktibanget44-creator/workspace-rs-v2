@@ -25,7 +25,7 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-app = FastAPI(title="Sanad API")
+app = FastAPI(title="Workspace Ruang Sanad API")
 api_router = APIRouter(prefix="/api")
 
 get_current_user, require_spv = make_auth_dependencies(db)
@@ -321,7 +321,7 @@ class RaportNoteUpdate(BaseModel):
 # ============ TASK ROUTES ============
 @api_router.get("/")
 async def root():
-    return {"message": "Sanad API", "version": "1.1"}
+    return {"message": "Workspace Ruang Sanad API", "version": "1.2"}
 
 
 @api_router.get("/tasks", response_model=List[Task])
@@ -1423,7 +1423,7 @@ async def export_raport_pdf(
         summary, start or "-", end or "-",
         subject=subject, anggota_nama=anggota_nama, divisi_nama=divisi_nama,
     )
-    fname = f"raport-sanad-{slug}-{(start or 'all')}_{(end or 'all')}.pdf"
+    fname = f"raport-ruang-sanad-{slug}-{(start or 'all')}_{(end or 'all')}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",

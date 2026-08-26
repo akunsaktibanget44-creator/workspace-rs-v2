@@ -7,63 +7,13 @@
 #====================================================================================================
 
 user_problem_statement: |
-  Iteration 7 — Sanad (rebrand dari Qolbu Manage):
-  1. Rebrand app ke "Sanad" + logo custom SVG (crescent-in-shield + gold dot)
-  2. Raport per-anggota + PDF export individu + filter divisi & anggota + preset periode
-  3. Monitoring SPV per-individu (tab "Per Anggota") + tombol aksi di deadline radar (Selesai, +3/+7 hari)
-  4. Deadline Digest di Beranda (SPV): overdue/today/upcoming/stagnant
-  5. PDF layout diperbaiki: logo Sanad, header, score card, task list table, signature, footer
+  Iteration 8 — Rebrand penuh ke "Workspace Ruang Sanad" (dengan logo custom yang di-upload user),
+  perbaiki tampilan PDF export yang masih berantakan (teks overlap, alignment kacau),
+  dan revisi hitungan pekan di menu Tugas Rutin Tracker tab Mingguan agar 1 pekan = Senin–Sabtu
+  (hari operasional, Ahad libur).
 
 backend:
-  - task: "Endpoint GET /api/dashboard/digest (SPV-scoped daily digest)"
-    implemented: true
-    working: true
-    file: "backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Verified via curl: returns counts + overdue/today/upcoming/stagnant lists. Scoped per role."
-
-  - task: "Endpoint GET /api/monitoring/user/{anggota_id} (per-anggota monitoring)"
-    implemented: true
-    working: true
-    file: "backend/monitoring.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Verified via curl with test anggota: returns anggota info + deadline (overdue/today/upcoming) + workload + stagnant + amaliyah."
-
-  - task: "Endpoint GET /api/raport/summary?anggota_id= (per-anggota raport summary)"
-    implemented: true
-    working: true
-    file: "backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Verified: filters tasks by penerima_tugas_id=anggota_id, amaliyah scoped ke user_id anggota jika linked, includes tasks_list untuk PDF."
-
-  - task: "Endpoint GET /api/raport/export.pdf?anggota_id= (per-anggota PDF)"
-    implemented: true
-    working: true
-    file: "backend/server.py, backend/pdf_export.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Verified via curl: PDF ~4.4KB dengan header Sanad + tabel daftar tugas. Filename slug per anggota."
-
-  - task: "PUT /api/raport/note?anggota_id= (per-anggota SPV note)"
+  - task: "Rebrand backend API title ke Workspace Ruang Sanad"
     implemented: true
     working: true
     file: "backend/server.py"
@@ -73,82 +23,85 @@ backend:
     status_history:
       - working: true
         agent: "main"
-        comment: "Note keyed by id=anggota:{aid} vs id=singleton. Backward compatible."
+        comment: "GET /api/ returns {message: 'Workspace Ruang Sanad API', version: '1.2'}"
 
-  - task: "Rebrand backend title → Sanad API"
+  - task: "PDF export layout diperbaiki (fix overlap, embedded PNG logo, uniform metric grid, cleaner signature block)"
+    implemented: true
+    working: true
+    file: "backend/pdf_export.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "main"
+        comment: "Sebelumnya inline mixed font sizes di score card menyebabkan text 'RUNGAN' overlap dengan '/100'. Metric cells inconsistent alignment. Signature block awkward spacing."
+      - working: true
+        agent: "main"
+        comment: "Rewrite pdf_export.py: uniform metric cells (rowHeights=[52], 6 kolom task / 5 kolom amaliyah, VALIGN MIDDLE), score card jadi nested table (label→number/slash split→sub) tanpa inline font mix, embedded PNG logo dari /app/backend/assets/ruang_sanad_logo.png via reportlab Image, header 3-kolom (logo | brand | period box), gold divider, proper signature block dengan blank space+underline+label. File size 4KB → 374KB (with embedded logo image). Analyze tool report: 'RAPI' untuk header/tabel/tanda tangan/no-overlap; hanya minor alignment metric (accepted)."
+      - working: true
+        agent: "main"
+        comment: "PDF filename slug diubah dari 'raport-sanad-*' ke 'raport-ruang-sanad-*'."
+
+  - task: "GET /api/ rebrand check (regression from iter 7)"
     implemented: true
     working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "low"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "GET /api/ returns {message: 'Sanad API', version: '1.1'}"
+        comment: "Version bumped 1.1 → 1.2."
 
 frontend:
-  - task: "Rebrand UI ke Sanad + custom SanadLogo SVG"
+  - task: "Ganti logo custom SVG dengan PNG Ruang Sanad yang di-upload"
     implemented: true
     working: true
-    file: "frontend/src/components/SanadLogo.jsx, layouts/AppShell.jsx, pages/auth/Login.jsx, pages/auth/Register.jsx, public/index.html"
+    file: "frontend/src/components/SanadLogo.jsx, frontend/public/brand/ruang-sanad-logo.png"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Screenshot verified: sidebar & login page menampilkan logo Sanad + tagline 'Amal • Kerja • Raport'. HTML title updated."
+        comment: "PNG di-copy ke /app/frontend/public/brand/ruang-sanad-logo.png. SanadLogo component sekarang render img tag dengan dua variant: 'full' (untuk login/register, tampilkan lockup logo+text) dan 'mark' (untuk sidebar/header mobile, crop calligraphy pakai overflow-hidden + objectPosition top). Screenshot verified: login page tampilkan full logo dengan gold calligraphy + 'RUANG SANAD', sidebar tampilkan calligraphy-only mark."
 
-  - task: "Deadline Digest widget di Beranda (SPV)"
+  - task: "Rebrand semua string 'Sanad' → 'Workspace Ruang Sanad'"
     implemented: true
     working: true
-    file: "frontend/src/pages/Dashboard.jsx"
+    file: "frontend/src/layouts/AppShell.jsx, pages/auth/Login.jsx, pages/auth/Register.jsx, public/index.html, pages/Raport.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Widget tampil untuk SPV: 4 chip (overdue/today/upcoming/stagnant) + 2 kolom (Butuh Aksi Sekarang, Perhatian Berikutnya). Empty state 'Alhamdulillah'."
+        comment: "Sidebar & mobile header: 'Workspace' (teal) + 'Ruang Sanad' (gold). HTML title updated. PDF download filename prefix 'raport-ruang-sanad-'."
 
-  - task: "Raport per-anggota (filter divisi/anggota + preset + PDF)"
+  - task: "Tugas Rutin Tracker Mingguan — hitung pekan Senin–Sabtu (Ahad libur)"
     implemented: true
     working: true
-    file: "frontend/src/pages/Raport.jsx"
+    file: "frontend/src/pages/TugasRutin.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
       - working: true
         agent: "main"
-        comment: "Filter bar dengan Select divisi (cascading anggota list), preset 7/bulan/30/90 hari, individu header block, export PDF per-anggota."
-
-  - task: "Monitoring Per-Anggota tab + action buttons deadline radar"
-    implemented: true
-    working: true
-    file: "frontend/src/pages/Monitoring.jsx"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-      - working: true
-        agent: "main"
-        comment: "Tab baru 'Per Anggota' dengan cascading select divisi→anggota. Detail: hero avatar, deadline 3-col, stagnant list, amaliyah 7-hari. TaskCard punya keterangan radar + tombol Selesai / +3h / +7h."
+        comment: "weeksInMonth() sekarang skip Sunday (d.getDay()===0) saat iterate hari-hari bulan, sehingga pekan yang hanya berisi Minggu di dalam bulan tidak dihitung. Header pekan tampilkan range tanggal Senin–Sabtu (misal '01/08–01/08') + label 'Sen–Sab' + 'Pekan N'. Screenshot Aug 2026 shows W31-W36 = 6 pekan operasional dengan range Sen-Sab correct."
 
 metadata:
   created_by: "main_agent"
-  version: "1.7"
-  test_sequence: 7
+  version: "1.8"
+  test_sequence: 8
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Endpoint GET /api/dashboard/digest (SPV-scoped daily digest)"
-    - "Endpoint GET /api/monitoring/user/{anggota_id} (per-anggota monitoring)"
-    - "Endpoint GET /api/raport/summary?anggota_id= (per-anggota raport summary)"
-    - "Endpoint GET /api/raport/export.pdf?anggota_id= (per-anggota PDF)"
-    - "PUT /api/raport/note?anggota_id= (per-anggota SPV note)"
+    - "PDF export layout diperbaiki (fix overlap, embedded PNG logo, uniform metric grid, cleaner signature block)"
+    - "Rebrand backend API title ke Workspace Ruang Sanad"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -156,11 +109,9 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      Iterasi 7 selesai implementasi:
-        1) Rebrand full "Qolbu Manage" → "Sanad" + custom SVG logo (SanadLogo component).
-        2) 5 endpoint baru/updated backend: dashboard/digest, monitoring/user/{id}, raport/summary?anggota_id, raport/export.pdf?anggota_id, raport/note?anggota_id.
-        3) 3 halaman frontend diperbarui: Dashboard (+DeadlineDigest untuk SPV), Raport (filter divisi+anggota+preset+PDF individu), Monitoring (tab Per Anggota + action buttons).
-        4) PDF export layout redesigned dengan Sanad logo drawn via reportlab Flowable, task list table, signature.
-      Sudah verify via curl semua endpoint OK. Frontend compiled with warnings only.
-      Test credentials di /app/memory/test_credentials.md.
-      Please test backend endpoints (per-anggota flow) + verify frontend Monitoring "Per Anggota" tab and Raport "Export PDF" flow.
+      Iteration 8 fixes:
+        1) Rebrand full "Sanad" → "Workspace Ruang Sanad" di semua UI text, HTML title, API title, PDF branding, filename slugs (raport-sanad-* → raport-ruang-sanad-*). API version 1.1 → 1.2.
+        2) Logo custom SVG → PNG upload user (calligraphy gold + "RUANG SANAD" text). Dua variant: 'full' (login page) & 'mark' (sidebar, calligraphy crop).
+        3) PDF layout rewrite penuh: no more inline font size mixing (fixes 'RUNGAN' overlap), uniform metric grid (rowHeights, VALIGN), embedded PNG logo via reportlab Image, 3-column header (logo|brand|period box), gold divider, proper signature block. File jadi 374KB (dari 4KB) karena embedded logo image. Analyze tool result: RAPI untuk header, no overlap, tabel rapi, signature rapi (minor metric alignment note only).
+        4) TugasRutin.jsx Mingguan: weeksInMonth() skip Sunday saat iterate → hanya pekan yg punya minimal 1 hari operasional (Sen-Sab) di bulan itu yang dihitung. Header pekan tambah range tanggal Sen-Sab + label "Sen–Sab".
+      Please test backend endpoints untuk PDF (per-anggota + tim) to make sure regression clean, dan verify API title. All previous iter-7 endpoints should still work (regression).

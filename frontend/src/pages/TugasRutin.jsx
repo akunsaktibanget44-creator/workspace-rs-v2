@@ -20,20 +20,33 @@ function fmtDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Return array of ISO weeks (with year) covering the given month
+// Return array of ISO weeks (with year) covering the given month.
+// A "pekan" only counts if the week has at least one operational day (Mon-Sat) inside the month.
+// Sundays are excluded — they are not operational.
 function weeksInMonth(year, month) {
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
   const results = [];
   const seen = new Set();
   for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+    if (d.getDay() === 0) continue; // skip Sunday (non-operational)
     const w = isoWeek(d);
-    // Compute the ISO year for the week (weeks near year boundary can belong to prev/next year)
     const y = weekYear(new Date(d));
     const key = `${y}-W${w}`;
     if (!seen.has(key)) {
       seen.add(key);
-      results.push({ week: w, year: y, label: `W${w}` });
+      // Compute operational range (Mon-Sat) for this week that intersects the month
+      const monday = new Date(d);
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7)); // back to Monday
+      const saturday = new Date(monday);
+      saturday.setDate(monday.getDate() + 5);
+      const rangeStart = monday < first ? first : monday;
+      const rangeEnd = saturday > last ? last : saturday;
+      // If range end is Sunday (0) — clamp back to Saturday
+      if (rangeEnd.getDay() === 0) rangeEnd.setDate(rangeEnd.getDate() - 1);
+      const startLabel = `${String(rangeStart.getDate()).padStart(2, "0")}/${String(rangeStart.getMonth() + 1).padStart(2, "0")}`;
+      const endLabel = `${String(rangeEnd.getDate()).padStart(2, "0")}/${String(rangeEnd.getMonth() + 1).padStart(2, "0")}`;
+      results.push({ week: w, year: y, label: `W${w}`, range: `${startLabel}–${endLabel}` });
     }
   }
   return results;
@@ -281,7 +294,7 @@ function MingguanMatrix({ tasks, year, month, entryMap, onToggle }) {
   return (
     <div className="rounded-xl border border-emerald-100 bg-white p-4 md:p-6">
       <div className="mb-3 flex items-center gap-2">
-        <p className="text-xs uppercase tracking-widest text-emerald-800/60">Pekan di bulan</p>
+        <p className="text-xs uppercase tracking-widest text-emerald-800/60">Pekan operasional (Sen–Sab) di bulan</p>
         <p className="font-display text-sm font-semibold text-emerald-950">{monthName} {year}</p>
         <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">{weeks.length} pekan</span>
       </div>
@@ -293,9 +306,11 @@ function MingguanMatrix({ tasks, year, month, entryMap, onToggle }) {
               {weeks.map((w, i) => {
                 const isCurrent = w.year === currentWeekYear && w.week === currentWeek;
                 return (
-                  <th key={`${w.year}-${w.week}`} className="p-1 text-center text-[10px] text-emerald-800/60 min-w-[44px]">
-                    <div className={`mx-auto grid h-7 w-10 place-items-center rounded ${isCurrent ? "bg-emerald-900 text-white" : ""}`}>W{w.week}</div>
-                    <div className="mt-0.5 text-[9px] text-emerald-700/50">Pekan {i + 1}</div>
+                  <th key={`${w.year}-${w.week}`} className="p-1 text-center text-[10px] text-emerald-800/60 min-w-[56px]">
+                    <div className={`mx-auto grid h-7 w-14 place-items-center rounded ${isCurrent ? "bg-emerald-900 text-white" : ""}`}>W{w.week}</div>
+                    <div className="mt-0.5 text-[9px] text-emerald-700/60">Pekan {i + 1}</div>
+                    <div className="text-[9px] text-emerald-700/50">{w.range}</div>
+                    <div className="text-[8px] uppercase tracking-wider text-emerald-700/40">Sen–Sab</div>
                   </th>
                 );
               })}

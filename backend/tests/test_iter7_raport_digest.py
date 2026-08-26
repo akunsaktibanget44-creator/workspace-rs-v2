@@ -79,8 +79,8 @@ def test_root_rebrand():
     r = requests.get(f"{API}/")
     assert r.status_code == 200
     data = r.json()
-    assert data.get("message") == "Sanad API"
-    assert data.get("version") == "1.1"
+    assert data.get("message") == "Workspace Ruang Sanad API"
+    assert data.get("version") == "1.2"
 
 
 # ============ SPV Login (covered in fixture but explicit test) ============

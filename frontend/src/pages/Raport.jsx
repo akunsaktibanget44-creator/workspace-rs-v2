@@ -86,7 +86,7 @@ export default function Raport() {
       const a = document.createElement("a");
       a.href = url;
       const anggotaLabel = anggotaId !== "ALL" ? (anggotaList.find((x) => x.id === anggotaId)?.nama || "anggota").replace(/\s+/g, "-").toLowerCase() : "tim";
-      a.download = `raport-sanad-${anggotaLabel}-${start}_${end}.pdf`;
+      a.download = `raport-ruang-sanad-${anggotaLabel}-${start}_${end}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();

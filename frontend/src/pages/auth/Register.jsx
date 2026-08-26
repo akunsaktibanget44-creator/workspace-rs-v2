@@ -51,9 +51,9 @@ export default function Register() {
     <div className="min-h-screen bg-emerald-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center">
-          <SanadLogo size={60} />
-          <h1 className="mt-3 font-display text-2xl font-bold text-emerald-950 tracking-tight">Sanad · Daftar</h1>
-          <p className="text-xs text-emerald-800/70">Akun baru perlu di-approve SPV.</p>
+          <SanadLogo size={100} variant="full" />
+          <h1 className="mt-3 font-display text-xl font-bold text-emerald-950 tracking-tight">Daftar Akun</h1>
+          <p className="text-xs text-emerald-800/70">Workspace Ruang Sanad · perlu di-approve SPV.</p>
         </div>
 
         <form onSubmit={submit} className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-xl space-y-3">

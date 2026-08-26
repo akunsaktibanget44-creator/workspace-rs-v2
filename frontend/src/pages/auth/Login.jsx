@@ -51,9 +51,8 @@ export default function Login() {
 
       <div className="relative w-full max-w-md">
         <div className="mb-6 flex flex-col items-center">
-          <SanadLogo size={64} />
-          <h1 className="mt-3 font-display text-3xl font-bold text-emerald-950 tracking-tight">Sanad</h1>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-700/70">Amal • Kerja • Raport</p>
+          <SanadLogo size={120} variant="full" />
+          <p className="mt-3 text-[11px] uppercase tracking-[0.22em] text-emerald-800/70">Workspace · Amal • Kerja • Raport</p>
         </div>
 
         <div className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-xl shadow-emerald-900/5">
