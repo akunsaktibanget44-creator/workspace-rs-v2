@@ -32,8 +32,14 @@
 - `PUT /auth/profile`, `POST /auth/users` (SPV buat user langsung approved), `PUT /auth/users/{id}/password` (reset + cabut sesi).
 - Sidebar: tombol "Profil Saya"; Manajemen User: "Tambah User" + reset password per baris.
 
+### 11.5 Fix Default Backlog, Sinkron Status & Crash Tabel
+- Delegasi tidak lagi memindahkan divisi/list tugas — tugas tetap di divisi & list pembuat (default Backlog); penerima melihat via scope. SPV tertaut anggota tercatat sebagai pemberi.
+- Sinkron status otomatis saat `list_id` berubah (backend `update_task` + drag kanban): is_done→SELESAI, urutan≤1→BELUM_MULAI, lainnya→DALAM_PROSES.
+- Kanban fallback: tugas dengan list milik divisi lain dikelompokkan per status. Tabel: badge status statis untuk list lintas divisi (`row-status-{id}`).
+- Fix crash `listMap is not defined` di Row TableView; fix isolasi test profile (temp user per-class untuk xdist).
+
 ### Test
-- `test_iter11_delegasi.py` (11), `test_iter11_2_cross_divisi.py` (2+1 skip), `test_iter11_3_revisi.py` (7), `test_profile_usermgmt.py` (8) — semua pass; reports: test_reports/iteration_13..18.json.
+- `test_iter11_delegasi.py` (11), `test_iter11_2_cross_divisi.py` (2+1 skip), `test_iter11_3_revisi.py` (7), `test_profile_usermgmt.py` (8) — 28 passed, 1 skipped; reports: test_reports/iteration_13..19.json.
 
 ## Iterasi 10 (Feb 2026) — Vision/Mission + BSC↔OKR link + Komitmen PDF + Sidebar rebrand
 
