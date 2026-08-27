@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,14 +17,26 @@ import {
 } from "@/lib/api";
 import { ColorPicker, KATEGORI_LABEL, TIPES } from "./shared";
 
+const STATUS_LABELS = { BELUM_MULAI: "Belum Mulai", DALAM_PROSES: "Dalam Proses", SELESAI: "Selesai", TERKENDALA: "Terkendala", REVISI: "Revisi" };
+
 // ============ TASK DIALOG ============
-export function TaskDialog({ open, onOpenChange, form, setForm, onSubmit, editing, lists, labels, anggotaAll, divisiList, currentDivisiId, onNeedMoveConfirm }) {
+export function TaskDialog({ open, onOpenChange, form, setForm, onSubmit, editing, lists, labels, anggotaAll, divisiList, currentDivisiId, onNeedMoveConfirm, isSpv = true, myAnggotaId = null, editingTask = null, onRevisi = null }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e?.target ? e.target.value : e });
+  const [revisiNote, setRevisiNote] = useState("");
   const toggleLabel = (id) => {
     const has = (form.label_ids || []).includes(id);
     setForm({ ...form, label_ids: has ? form.label_ids.filter((x) => x !== id) : [...(form.label_ids || []), id] });
   };
   const isRutin = form.kategori !== "PROJECT";
+
+  // Delegation view: I'm pemberi (yg ngasih), tapi bukan penerima → read-only monitoring mode
+  const isMonitorOnly = !isSpv && editingTask &&
+    editingTask.pemberi_id === myAnggotaId &&
+    editingTask.penerima_tugas_id !== myAnggotaId;
+  // Only penerima (or SPV) may fill hasil_*; pemberi tidak boleh.
+  const canFillHasil = isSpv || (editingTask && editingTask.penerima_tugas_id === myAnggotaId);
+  const pemberiAnggota = editingTask?.pemberi_id ? anggotaAll.find((a) => a.id === editingTask.pemberi_id) : null;
+  const canRevisi = editing && onRevisi && (isMonitorOnly || isSpv);
 
   const anggotaByDivisi = {};
   anggotaAll.forEach((a) => {
@@ -48,9 +60,26 @@ export function TaskDialog({ open, onOpenChange, form, setForm, onSubmit, editin
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="task-dialog">
         <DialogHeader>
-          <DialogTitle className="font-display text-xl">{editing ? "Ubah Tugas" : "Tugas Baru"}</DialogTitle>
+          <DialogTitle className="font-display text-xl">
+            {editing ? "Ubah Tugas" : "Tugas Baru"}
+            {isMonitorOnly && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Monitor (read-only)</span>}
+          </DialogTitle>
+          <DialogDescription className="sr-only">Formulir membuat atau mengubah tugas, termasuk penerima, brief, dan hasil.</DialogDescription>
         </DialogHeader>
+        {isMonitorOnly && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+            Anda adalah <b>pemberi tugas</b>, bukan penerima. Anda hanya dapat memantau progress & melihat hasil. Hanya penerima (atau SPV) yang bisa mengubah tugas ini.
+          </div>
+        )}
+        <fieldset disabled={isMonitorOnly} className={isMonitorOnly ? "opacity-90" : ""}>
         <div className="space-y-3">
+          {editing && !isMonitorOnly && editingTask?.status === "REVISI" && editingTask?.revisi_catatan && (
+            <div data-testid="revisi-banner" className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900">
+              <p className="font-semibold">Revisi{pemberiAnggota ? ` dari ${pemberiAnggota.nama}` : ""}{editingTask.revisi_count > 1 ? ` (ke-${editingTask.revisi_count})` : ""}:</p>
+              <p className="mt-1">{editingTask.revisi_catatan}</p>
+              <p className="mt-1 text-[10px] text-red-700/70">Perbaiki hasil tugas, lalu ubah status kembali (misal Dalam Proses / Selesai).</p>
+            </div>
+          )}
           <div>
             <label className="text-xs font-medium text-emerald-900">Nama Tugas *</label>
             <Input data-testid="input-nama" value={form.nama} onChange={set("nama")} placeholder="contoh: Rekap konten pekan ini" />
@@ -69,6 +98,17 @@ export function TaskDialog({ open, onOpenChange, form, setForm, onSubmit, editin
               </p>
             )}
           </div>
+          {editing && (
+            <div>
+              <label className="text-xs font-medium text-emerald-900">Status Tugas</label>
+              <Select value={form.status} onValueChange={set("status")}>
+                <SelectTrigger data-testid="select-status"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(STATUS_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {!isRutin && (
             <div>
               <label className="text-xs font-medium text-emerald-900">List</label>
@@ -143,7 +183,7 @@ export function TaskDialog({ open, onOpenChange, form, setForm, onSubmit, editin
                 </SelectContent>
               </Select>
               <p className="mt-1 text-[10px] text-emerald-700/70">
-                Memilih anggota dari tim lain akan menyarankan pemindahan tugas.
+                Bisa pilih anggota <b>lintas divisi</b>. Tugas tetap tampil di workspace Anda sebagai <b>monitor</b> (read-only); penerima yang mengerjakan &amp; mengisi hasil.
               </p>
             </div>
           </div>
@@ -151,24 +191,64 @@ export function TaskDialog({ open, onOpenChange, form, setForm, onSubmit, editin
             <label className="text-xs font-medium text-emerald-900">Catatan Tim</label>
             <Textarea rows={2} value={form.catatan_tim || ""} onChange={set("catatan_tim")} />
           </div>
+          <div>
+            <label className="text-xs font-medium text-emerald-900">Brief / Link Referensi <span className="text-emerald-700/50">(opsional)</span></label>
+            <Input value={form.brief_link || ""} onChange={set("brief_link")} placeholder="https://docs.google.com/... (link brief eksternal)" data-testid="input-brief-link" />
+          </div>
           {editing && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                Hasil Tugas {canFillHasil ? <span className="text-[10px] font-normal normal-case text-emerald-700/70">(diisi oleh penerima)</span> : <span className="text-[10px] font-normal normal-case text-amber-700">(read-only — hanya penerima yang bisa isi)</span>}
+              </p>
+              <div className="space-y-2">
+                <div>
+                  <label className="text-xs font-medium text-emerald-900">Link Hasil</label>
+                  <Input value={form.hasil_link || ""} onChange={set("hasil_link")} placeholder="https://drive.google.com/..." disabled={!canFillHasil} data-testid="input-hasil-link" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-emerald-900">Catatan Hasil</label>
+                  <Textarea rows={2} value={form.hasil_catatan || ""} onChange={set("hasil_catatan")} placeholder="Catatan singkat hasil pengerjaan..." disabled={!canFillHasil} data-testid="input-hasil-catatan" />
+                </div>
+              </div>
+            </div>
+          )}
+          {editing && isSpv && (
             <>
               <div>
                 <label className="text-xs font-medium text-emerald-900">Catatan SPV <span className="text-emerald-700/50">(saat edit)</span></label>
                 <Textarea rows={2} value={form.catatan_spv || ""} onChange={set("catatan_spv")} data-testid="input-catatan-spv" />
               </div>
               <div>
-                <label className="text-xs font-medium text-emerald-900">Link Output / Dokumen</label>
+                <label className="text-xs font-medium text-emerald-900">Link Output / Dokumen (legacy)</label>
                 <Input value={form.link_output || ""} onChange={set("link_output")} placeholder="https://..." data-testid="input-link" />
               </div>
             </>
           )}
         </div>
+        </fieldset>
+        {canRevisi && (
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50/60 p-3" data-testid="revisi-box">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-red-800">Review Hasil &amp; Minta Revisi</p>
+            {editingTask?.revisi_catatan && (
+              <p className="mb-2 text-[10px] text-red-700/70">
+                Revisi terakhir{editingTask.revisi_count ? ` (total ${editingTask.revisi_count}x)` : ""}: {editingTask.revisi_catatan}
+              </p>
+            )}
+            <Textarea rows={2} value={revisiNote} onChange={(e) => setRevisiNote(e.target.value)}
+              placeholder="Tulis apa yang perlu direvisi penerima..." data-testid="input-revisi-catatan" />
+            <Button onClick={() => { onRevisi(editingTask.id, revisiNote); setRevisiNote(""); }} disabled={!revisiNote.trim()}
+              data-testid="submit-revisi" className="mt-2 bg-red-600 text-white hover:bg-red-700">
+              Kirim Revisi (ubah status jadi REVISI)
+            </Button>
+          </div>
+        )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button onClick={onSubmit} data-testid="submit-task" className="bg-emerald-900 hover:bg-emerald-800">
-            {editing ? "Simpan Perubahan" : "Tambah Tugas"}
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{isMonitorOnly ? "Tutup" : "Batal"}</Button>
+          {!isMonitorOnly && (
+            <Button onClick={onSubmit} data-testid="submit-task" className="bg-emerald-900 hover:bg-emerald-800">
+              {editing ? "Simpan Perubahan" : "Tambah Tugas"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

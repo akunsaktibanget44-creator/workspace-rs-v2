@@ -46,15 +46,20 @@ async def user_scope(user: dict) -> dict:
 
 
 async def _assert_task_access(task_id: str, user: dict) -> dict:
-    """Load a task and verify user is SPV or the task belongs to their divisi."""
+    """Load a task and verify user is SPV, penerima, pemberi, or task belongs to their divisi (rutin only)."""
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(404, "Task not found")
     scope = await user_scope(user)
-    if not scope["is_spv"]:
-        if not scope["divisi_id"] or task.get("divisi_id") != scope["divisi_id"]:
-            raise HTTPException(403, "Tugas ini bukan bagian dari tim Anda.")
-    return task
+    if scope["is_spv"]:
+        return task
+    my_ang = scope["anggota_id"]
+    is_rutin = task.get("kategori") in ("HARIAN", "MINGGUAN", "BULANAN")
+    if my_ang and (task.get("penerima_tugas_id") == my_ang or task.get("pemberi_id") == my_ang):
+        return task
+    if is_rutin and scope["divisi_id"] and task.get("divisi_id") == scope["divisi_id"]:
+        return task
+    raise HTTPException(403, "Tugas ini bukan bagian dari workspace Anda.")
 
 
 async def _assert_bulk_task_access(ids: List[str], user: dict) -> List[dict]:
@@ -117,6 +122,13 @@ class TaskBase(BaseModel):
     label_ids: List[str] = Field(default_factory=list)
     kategori_id: Optional[str] = None
     penerima_tugas_id: Optional[str] = None
+    pemberi_id: Optional[str] = None  # anggota_id yg mendelegasikan (auto-set on create for anggota)
+    brief_link: Optional[str] = ""  # URL brief eksternal (opsional)
+    hasil_link: Optional[str] = ""  # URL hasil dari penerima
+    hasil_catatan: Optional[str] = ""  # Catatan hasil dari penerima
+    revisi_catatan: Optional[str] = ""  # Catatan revisi dari pemberi/SPV
+    revisi_at: Optional[str] = None
+    revisi_count: int = 0
     moved_at: Optional[str] = None
 
 
@@ -150,6 +162,13 @@ class TaskUpdate(BaseModel):
     archived: Optional[bool] = None
     kategori_id: Optional[str] = None
     penerima_tugas_id: Optional[str] = None
+    pemberi_id: Optional[str] = None
+    brief_link: Optional[str] = None
+    hasil_link: Optional[str] = None
+    hasil_catatan: Optional[str] = None
+    revisi_catatan: Optional[str] = None
+    revisi_at: Optional[str] = None
+    revisi_count: Optional[int] = None
     moved_at: Optional[str] = None
 
 
@@ -350,20 +369,32 @@ async def list_tasks(
         q["list_id"] = list_id
     if label_id:
         q["label_ids"] = label_id
-    if divisi_id:
-        q["divisi_id"] = divisi_id
     if search:
         q["nama"] = {"$regex": search, "$options": "i"}
     if tipe == "PROJECT":
         q["kategori"] = "PROJECT"
     elif tipe == "RUTIN":
         q["kategori"] = {"$in": ["HARIAN", "MINGGUAN", "BULANAN"]}
-    # Scope: anggota can only see their own divisi
+    # Scope: anggota melihat tugas yang ditugaskan ke/dari dia (LINTAS divisi — delegasi),
+    # plus tugas rutin di divisinya. JANGAN terapkan filter divisi_id top-level untuk anggota,
+    # karena itu menyembunyikan tugas delegasi lintas divisi.
     if not scope["is_spv"]:
-        if scope["divisi_id"]:
-            q["divisi_id"] = scope["divisi_id"]
-        else:
+        my_ang = scope["anggota_id"]
+        my_div = scope["divisi_id"]
+        or_clauses = []
+        if my_ang:
+            or_clauses.append({"penerima_tugas_id": my_ang})
+            or_clauses.append({"pemberi_id": my_ang})
+        if my_div:
+            or_clauses.append({
+                "kategori": {"$in": ["HARIAN", "MINGGUAN", "BULANAN"]},
+                "divisi_id": my_div,
+            })
+        if not or_clauses:
             return []
+        q["$or"] = or_clauses
+    elif divisi_id:
+        q["divisi_id"] = divisi_id
     rows = await db.tasks.find(q, {"_id": 0}).sort([("urutan", 1), ("created_at", -1)]).to_list(3000)
     return rows
 
@@ -372,11 +403,32 @@ async def list_tasks(
 async def create_task(payload: TaskBase, user: dict = Depends(get_current_user)):
     scope = await user_scope(user)
     data = payload.model_dump()
-    # Anggota can only create tasks in their divisi
+    # Anggota: auto-set pemberi_id = self anggota_id, and default penerima = self if empty
     if not scope["is_spv"]:
-        if not scope["divisi_id"]:
-            raise HTTPException(403, "Akun belum terhubung ke tim. Hubungi SPV.")
-        data["divisi_id"] = scope["divisi_id"]
+        if not scope["anggota_id"]:
+            raise HTTPException(403, "Akun belum terhubung ke anggota. Hubungi SPV.")
+        data["pemberi_id"] = scope["anggota_id"]
+        # If penerima kosong, default = diri sendiri
+        if not data.get("penerima_tugas_id"):
+            data["penerima_tugas_id"] = scope["anggota_id"]
+        # Divisi_id mengikuti penerima (untuk delegasi antar divisi)
+        penerima_ang = await db.anggota.find_one({"id": data["penerima_tugas_id"]}, {"_id": 0})
+        if penerima_ang:
+            data["divisi_id"] = penerima_ang.get("divisi_id") or scope["divisi_id"]
+        else:
+            data["divisi_id"] = scope["divisi_id"]
+        if data["divisi_id"] != scope["divisi_id"]:
+            data["list_id"] = None  # lintas divisi → masuk "Tanpa List" di workspace penerima
+    else:
+        # SPV: kalau pemberi_id kosong tapi ada penerima, kosongkan (SPV bukan anggota)
+        if not data.get("pemberi_id"):
+            data["pemberi_id"] = None
+        # Divisi mengikuti penerima agar tugas pasti muncul di workspace penerima
+        if data.get("penerima_tugas_id"):
+            penerima_ang = await db.anggota.find_one({"id": data["penerima_tugas_id"]}, {"_id": 0})
+            if penerima_ang and penerima_ang.get("divisi_id") and data.get("divisi_id") != penerima_ang["divisi_id"]:
+                data["divisi_id"] = penerima_ang["divisi_id"]
+                data["list_id"] = None
     task = Task(**data)
     await db.tasks.insert_one(task.model_dump())
     return task
@@ -392,16 +444,49 @@ async def get_task(task_id: str):
 
 @api_router.put("/tasks/{task_id}", response_model=Task)
 async def update_task(task_id: str, payload: TaskUpdate, user: dict = Depends(get_current_user)):
-    await _assert_task_access(task_id, user)
+    task = await _assert_task_access(task_id, user)
     scope = await user_scope(user)
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
-    # Prevent anggota from moving a task out of their divisi
-    if not scope["is_spv"] and "divisi_id" in update and update["divisi_id"] != scope["divisi_id"]:
-        raise HTTPException(403, "Anggota tidak dapat memindahkan tugas ke tim lain.")
+    # Anggota: kalau hanya sebagai pemberi (bukan penerima) → read-only, tidak boleh update
+    if not scope["is_spv"]:
+        my_ang = scope["anggota_id"]
+        is_penerima = my_ang and task.get("penerima_tugas_id") == my_ang
+        is_pemberi = my_ang and task.get("pemberi_id") == my_ang
+        if not is_penerima and is_pemberi:
+            raise HTTPException(403, "Anda hanya pemberi tugas — read-only. Hanya penerima yang dapat mengubah tugas ini.")
+        if "divisi_id" in update and update["divisi_id"] != scope["divisi_id"]:
+            raise HTTPException(403, "Anggota tidak dapat memindahkan tugas ke tim lain.")
     update["updated_at"] = now_iso()
     result = await db.tasks.find_one_and_update(
         {"id": task_id},
         {"$set": update},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not result:
+        raise HTTPException(404, "Task not found")
+    return result
+
+
+class RevisiPayload(BaseModel):
+    catatan: str = Field(min_length=1)
+
+
+@api_router.post("/tasks/{task_id}/revisi", response_model=Task)
+async def revisi_task(task_id: str, payload: RevisiPayload, user: dict = Depends(get_current_user)):
+    """Pemberi tugas (atau SPV) meminta revisi: set status=REVISI + catatan untuk penerima."""
+    task = await _assert_task_access(task_id, user)
+    scope = await user_scope(user)
+    if not scope["is_spv"]:
+        my_ang = scope["anggota_id"]
+        if not my_ang or task.get("pemberi_id") != my_ang or task.get("penerima_tugas_id") == my_ang:
+            raise HTTPException(403, "Hanya pemberi tugas yang dapat meminta revisi.")
+    result = await db.tasks.find_one_and_update(
+        {"id": task_id},
+        {
+            "$set": {"status": "REVISI", "revisi_catatan": payload.catatan, "revisi_at": now_iso(), "updated_at": now_iso()},
+            "$inc": {"revisi_count": 1},
+        },
         return_document=True,
         projection={"_id": 0},
     )
@@ -614,11 +699,8 @@ async def list_anggota(divisi_id: Optional[str] = None, user: dict = Depends(get
     q: dict = {}
     if divisi_id:
         q["divisi_id"] = divisi_id
-    if not scope["is_spv"]:
-        if scope["divisi_id"]:
-            q["divisi_id"] = scope["divisi_id"]
-        else:
-            return []
+    # Semua user (termasuk anggota) melihat daftar anggota SEMUA divisi —
+    # dibutuhkan untuk delegasi lintas divisi (picker penerima tugas). Read-only nama.
     rows = await db.anggota.find(q, {"_id": 0}).sort("urutan", 1).to_list(1000)
     return rows
 
@@ -723,12 +805,8 @@ async def list_divisi(user: dict = Depends(get_current_user)):
                     tl = TaskList(**x, divisi_id=d.id)
                     await db.task_lists.insert_one(tl.model_dump())
         rows = await db.divisi.find({}, {"_id": 0}).sort("urutan", 1).to_list(200)
-    # Scope: anggota only sees their divisi
-    if not scope["is_spv"]:
-        if scope["divisi_id"]:
-            rows = [d for d in rows if d["id"] == scope["divisi_id"]]
-        else:
-            rows = []
+    # Semua user melihat semua divisi (read-only nama) — dibutuhkan untuk picker delegasi.
+    # Frontend membatasi TAB workspace anggota ke divisinya sendiri.
     return rows
 
 

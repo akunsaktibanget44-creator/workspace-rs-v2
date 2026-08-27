@@ -18,6 +18,9 @@ export const authLogout = () => api.post("/auth/logout").then((r) => r.data);
 export const listUsers = (status) => api.get("/auth/users", { params: status ? { status } : {} }).then((r) => r.data);
 export const updateUserAcc = (id, p) => api.put(`/auth/users/${id}`, p).then((r) => r.data);
 export const deleteUserAcc = (id) => api.delete(`/auth/users/${id}`).then((r) => r.data);
+export const updateProfile = (p) => api.put("/auth/profile", p).then((r) => r.data);
+export const createUserAcc = (p) => api.post("/auth/users", p).then((r) => r.data);
+export const resetUserPassword = (id, new_password) => api.put(`/auth/users/${id}/password`, { new_password }).then((r) => r.data);
 
 // ============ SEARCH ============
 export const globalSearch = (q) => api.get("/search", { params: { q } }).then((r) => r.data);
@@ -92,6 +95,7 @@ export const deleteTask = (id) => api.delete(`/tasks/${id}`).then((r) => r.data)
 export const archiveTask = (id) => api.post(`/tasks/${id}/archive`).then((r) => r.data);
 export const unarchiveTask = (id) => api.post(`/tasks/${id}/unarchive`).then((r) => r.data);
 export const moveTask = (id, payload) => api.post(`/tasks/${id}/move`, payload).then((r) => r.data);
+export const revisiTask = (id, catatan) => api.post(`/tasks/${id}/revisi`, { catatan }).then((r) => r.data);
 export const bulkDeleteTasks = (ids) => api.post(`/tasks/bulk_delete`, { ids }).then((r) => r.data);
 
 // Divisi (Tim)

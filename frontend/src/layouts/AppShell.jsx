@@ -86,6 +86,9 @@ function SidebarBody({ onNavigate, unreadTotal, user, onLogout }) {
                 </p>
               </div>
             </div>
+            <NavLink to="/profile" onClick={onNavigate} data-testid="nav-profile" className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-emerald-200 px-2 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-50">
+              <Users size={12} /> Profil Saya
+            </NavLink>
             <button onClick={onLogout} data-testid="logout-btn" className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-emerald-200 px-2 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-50">
               <LogOut size={12} /> Keluar
             </button>

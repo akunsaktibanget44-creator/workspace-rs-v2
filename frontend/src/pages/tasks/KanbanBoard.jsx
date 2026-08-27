@@ -166,6 +166,24 @@ function Card({ task, labels, anggotaMap, kategoriMap, arsipMode, selected, anyS
           ))}
         </div>
       )}
+      {task.pemberi_id && task.penerima_tugas_id && task.pemberi_id !== task.penerima_tugas_id && anggotaMap[task.pemberi_id] && (
+        <p className="mt-1.5 text-[10px] font-medium text-sky-700" data-testid={`card-delegasi-${task.id}`}>
+          ↔ Delegasi dari {anggotaMap[task.pemberi_id].nama}
+        </p>
+      )}
+      {task.status === "REVISI" && (
+        <div className="mt-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1" data-testid={`card-revisi-${task.id}`}>
+          <p className="text-[10px] font-bold text-red-700">REVISI{task.revisi_count > 1 ? ` #${task.revisi_count}` : ""}</p>
+          {task.revisi_catatan && <p className="line-clamp-2 text-[10px] text-red-700/80">{task.revisi_catatan}</p>}
+        </div>
+      )}
+      {task.hasil_link && (
+        <a href={task.hasil_link} target="_blank" rel="noopener noreferrer" data-testid={`card-hasil-${task.id}`}
+          className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-200"
+          onPointerDown={(e) => e.stopPropagation()}>
+          Hasil ↗
+        </a>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-1">
         {kategori && <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ background: kategori.warna }}>{kategori.nama}</span>}
         {task.deadline && (

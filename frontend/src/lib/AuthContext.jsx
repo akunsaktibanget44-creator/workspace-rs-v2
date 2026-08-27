@@ -32,6 +32,7 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const r = await authLogin({ email, password });
     if (r.status === "approved") setUser(r.user);
+    else if (r.status === "pending" && r.user) setUser(r.user);
     return r;
   };
 

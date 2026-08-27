@@ -9,6 +9,32 @@
 - **SPV / Admin**: Approve user baru, atur role & link anggota, monitor deadline & beban kerja, export raport (tim & individu), review keputusan, kelola Strategi & Eksekusi (BSC/OKR/KPI/Action Plan).
 - **Anggota**: Isi/update tugas divisi mereka, tracker amaliyah pribadi, tracker rutin pribadi, update aktual KPI mereka, kontribusi KR sebagai owner/supporter OKR.
 
+## Iterasi 11 (Agu 2026) — Workspace Per-Anggota, Delegasi, Revisi, Profil
+
+### 11.1 Workspace Per-Anggota + Delegasi
+- Task fields baru: `pemberi_id`, `brief_link`, `hasil_link`, `hasil_catatan`.
+- Scope anggota: `$or` [penerima=me, pemberi=me, rutin divisiku]; SPV lihat semua.
+- Delegasi: tugas tampil di workspace pemberi (read-only "Monitor") & penerima (editable); hanya penerima/SPV bisa ubah status/hasil.
+- Kolom Hasil Tugas di tabel & kanban; RBAC hide "+ Tim"/"Anggota" untuk anggota.
+- Fix auth trap: Login.jsx tidak redirect paksa pending; banner amber + "Keluar & ganti akun"; DB promote akunsaktibanget33@gmail.com → SPV.
+
+### 11.2 Delegasi Lintas Divisi + Rapikan Tabel
+- `GET /anggota` & `/divisi` mengembalikan semua data ke semua role (picker delegasi).
+- `list_tasks`: tanpa filter divisi top-level untuk anggota; `create_task`: divisi_id ikut penerima, list_id null jika lintas.
+- Tabel: min-w 1280px, Nama truncate + badge baris kedua, Hasil max-220px.
+
+### 11.3 Review Hasil & Revisi
+- Status `REVISI` + fields `revisi_catatan/revisi_at/revisi_count`; endpoint `POST /tasks/{id}/revisi` (pemberi/SPV only).
+- Revisi-box untuk pemberi/SPV; revisi-banner merah untuk penerima; dropdown Status di dialog edit; badge REVISI di kanban & tabel.
+
+### 11.4 Profil & Manajemen User
+- `/profile` semua role: edit nama/email (unik), ganti password (wajib current, sesi lain dicabut).
+- `PUT /auth/profile`, `POST /auth/users` (SPV buat user langsung approved), `PUT /auth/users/{id}/password` (reset + cabut sesi).
+- Sidebar: tombol "Profil Saya"; Manajemen User: "Tambah User" + reset password per baris.
+
+### Test
+- `test_iter11_delegasi.py` (11), `test_iter11_2_cross_divisi.py` (2+1 skip), `test_iter11_3_revisi.py` (7), `test_profile_usermgmt.py` (8) — semua pass; reports: test_reports/iteration_13..18.json.
+
 ## Iterasi 10 (Feb 2026) — Vision/Mission + BSC↔OKR link + Komitmen PDF + Sidebar rebrand
 
 ### 1. Sidebar rebrand

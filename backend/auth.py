@@ -38,6 +38,25 @@ class UpdateUserPayload(BaseModel):
     anggota_id: Optional[str] = None
 
 
+class UpdateProfilePayload(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = Field(default=None, min_length=6)
+
+
+class CreateUserPayload(BaseModel):
+    name: str = Field(min_length=1)
+    email: EmailStr
+    password: str = Field(min_length=6)
+    role: str = "anggota"  # spv | anggota
+    anggota_id: Optional[str] = None
+
+
+class ResetPasswordPayload(BaseModel):
+    new_password: str = Field(min_length=6)
+
+
 # ============== HELPERS ==============
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -322,5 +341,73 @@ def build_auth_router(db: AsyncIOMotorDatabase) -> APIRouter:
         r = await db.users.delete_one({"user_id": user_id})
         await db.user_sessions.delete_many({"user_id": user_id})
         return {"ok": True, "deleted": r.deleted_count}
+
+    # ---------- PROFILE (SELF-SERVICE) ----------
+    @router.put("/profile")
+    async def update_profile(payload: UpdateProfilePayload, request: Request):
+        user = await get_current_user(request)
+        upd = {}
+        if payload.name is not None and payload.name.strip():
+            upd["name"] = payload.name.strip()
+        if payload.email is not None:
+            email = payload.email.lower()
+            existing = await db.users.find_one({"email": email})
+            if existing and existing["user_id"] != user["user_id"]:
+                raise HTTPException(400, "Email sudah dipakai akun lain.")
+            upd["email"] = email
+        if payload.new_password:
+            full = await db.users.find_one({"user_id": user["user_id"]})
+            if not full.get("password_hash"):
+                raise HTTPException(400, "Akun Google tidak punya password lokal. Minta SPV untuk reset password.")
+            if not payload.current_password or not verify_password(payload.current_password, full["password_hash"]):
+                raise HTTPException(400, "Password saat ini salah.")
+            upd["password_hash"] = hash_password(payload.new_password)
+        if not upd:
+            raise HTTPException(400, "Tidak ada perubahan.")
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
+        if payload.new_password:
+            # Cabut sesi lain, pertahankan sesi saat ini
+            token = request.cookies.get(SESSION_COOKIE)
+            if not token:
+                auth = request.headers.get("Authorization", "")
+                if auth.startswith("Bearer "):
+                    token = auth[7:]
+            q = {"user_id": user["user_id"]}
+            if token:
+                q["session_token"] = {"$ne": token}
+            await db.user_sessions.delete_many(q)
+        return {"ok": True}
+
+    # ---------- MANUAL USER MANAGEMENT (SPV) ----------
+    @router.post("/users")
+    async def create_user(payload: CreateUserPayload, _: dict = Depends(require_spv)):
+        email = payload.email.lower()
+        if await db.users.find_one({"email": email}):
+            raise HTTPException(400, "Email sudah terdaftar.")
+        if payload.role not in ("spv", "anggota"):
+            raise HTTPException(400, "Role tidak valid.")
+        doc = {
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": email,
+            "name": payload.name.strip(),
+            "password_hash": hash_password(payload.password),
+            "role": payload.role,
+            "status": "approved",
+            "auth_provider": "local",
+            "picture": "",
+            "anggota_id": payload.anggota_id,
+            "created_at": datetime.now(timezone.utc),
+        }
+        await db.users.insert_one(doc)
+        return _sanitize(doc)
+
+    @router.put("/users/{user_id}/password")
+    async def reset_user_password(user_id: str, payload: ResetPasswordPayload, _: dict = Depends(require_spv)):
+        target = await db.users.find_one({"user_id": user_id})
+        if not target:
+            raise HTTPException(404, "User tidak ditemukan.")
+        await db.users.update_one({"user_id": user_id}, {"$set": {"password_hash": hash_password(payload.new_password)}})
+        await db.user_sessions.delete_many({"user_id": user_id})
+        return {"ok": True}
 
     return router

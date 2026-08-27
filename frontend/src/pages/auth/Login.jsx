@@ -8,7 +8,7 @@ import { useAuth, formatApiErr } from "@/lib/AuthContext";
 import SanadLogo from "@/components/SanadLogo";
 
 export default function Login() {
-  const { login, user, loading } = useAuth();
+  const { login, logout, user, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -16,7 +16,6 @@ export default function Login() {
 
   useEffect(() => {
     if (user && user.status === "approved") navigate("/", { replace: true });
-    if (user && user.status === "pending") navigate("/pending", { replace: true });
   }, [user, navigate]);
 
   const submit = async (e) => {
@@ -58,6 +57,15 @@ export default function Login() {
         <div className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-xl shadow-emerald-900/5">
           <h2 className="font-display text-xl font-semibold text-emerald-950">Masuk ke Workspace</h2>
           <p className="mt-1 text-sm text-emerald-800/70">Bismillah, mari lanjutkan pekerjaan & amal harianmu.</p>
+
+          {user && user.status === "pending" && (
+            <div data-testid="pending-banner" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              Kamu masuk sebagai <b>{user.email}</b> yang masih <b>menunggu approval SPV</b>.{" "}
+              <button type="button" onClick={logout} data-testid="switch-account-btn" className="font-semibold underline hover:text-amber-950">
+                Keluar &amp; ganti akun
+              </button>
+            </div>
+          )}
 
           <button
             onClick={googleLogin}

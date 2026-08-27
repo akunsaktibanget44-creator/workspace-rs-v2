@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { UserCheck, UserX, Trash2, Users, Clock, CheckCircle2, XCircle, Search, ShieldCheck, User, Link2 } from "lucide-react";
+import { UserCheck, UserX, Trash2, Users, Clock, CheckCircle2, XCircle, Search, ShieldCheck, User, Link2, KeyRound, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { listUsers, updateUserAcc, deleteUserAcc, listAnggota, listDivisi } from "@/lib/api";
+import { listUsers, updateUserAcc, deleteUserAcc, listAnggota, listDivisi, createUserAcc, resetUserPassword } from "@/lib/api";
 import { useAuth, formatApiErr } from "@/lib/AuthContext";
 
 const STATUS_META = {
@@ -21,6 +21,10 @@ export default function UsersManagement() {
   const [tab, setTab] = useState("pending");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "anggota", anggota_id: null });
+  const [resetTarget, setResetTarget] = useState(null);
+  const [newPass, setNewPass] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -65,6 +69,27 @@ export default function UsersManagement() {
     catch (e) { toast.error(formatApiErr(e)); }
   };
 
+  const submitAdd = async () => {
+    if (!addForm.name.trim() || !addForm.email.trim() || addForm.password.length < 6)
+      return toast.error("Lengkapi nama, email, dan password (min 6 karakter)");
+    try {
+      await createUserAcc({ ...addForm, name: addForm.name.trim(), email: addForm.email.trim().toLowerCase() });
+      toast.success(`User ${addForm.email} dibuat & langsung aktif`);
+      setAddOpen(false);
+      setAddForm({ name: "", email: "", password: "", role: "anggota", anggota_id: null });
+      load();
+    } catch (e) { toast.error(formatApiErr(e)); }
+  };
+
+  const submitReset = async () => {
+    if (newPass.length < 6) return toast.error("Password minimal 6 karakter");
+    try {
+      await resetUserPassword(resetTarget.user_id, newPass);
+      toast.success(`Password ${resetTarget.email} direset — semua sesinya dicabut`);
+      setResetTarget(null); setNewPass("");
+    } catch (e) { toast.error(formatApiErr(e)); }
+  };
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-emerald-100 bg-white p-5">
@@ -81,9 +106,14 @@ export default function UsersManagement() {
             <TabButton active={tab === "all"} onClick={() => setTab("all")} label="Semua" count={users.length} tone="slate" testId="tab-all" />
           </div>
         </div>
-        <div className="mt-3 relative max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700/60" />
-          <Input data-testid="user-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama / email…" className="h-9 pl-9" />
+        <div className="mt-3 flex items-center gap-2">
+          <div className="relative max-w-sm flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700/60" />
+            <Input data-testid="user-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama / email…" className="h-9 pl-9" />
+          </div>
+          <Button onClick={() => setAddOpen(true)} data-testid="open-add-user" className="h-9 bg-emerald-900 text-white hover:bg-emerald-800">
+            <UserPlus size={14} /> Tambah User
+          </Button>
         </div>
       </div>
 
@@ -185,6 +215,11 @@ export default function UsersManagement() {
                           </Button>
                         )}
                         {!isMe && (
+                          <Button size="sm" variant="outline" onClick={() => { setResetTarget(u); setNewPass(""); }} data-testid={`reset-pass-${u.user_id}`} className="h-8" title="Reset password user ini">
+                            <KeyRound size={12} />
+                          </Button>
+                        )}
+                        {!isMe && (
                           <Button size="sm" onClick={() => remove(u)} data-testid={`delete-${u.user_id}`} className="bg-red-600 hover:bg-red-700 text-white h-8">
                             <Trash2 size={12} />
                           </Button>
@@ -198,6 +233,70 @@ export default function UsersManagement() {
           </table>
         )}
       </div>
+
+      {addOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setAddOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl" data-testid="add-user-dialog">
+            <h3 className="font-display text-lg font-semibold text-emerald-950">Tambah User Manual</h3>
+            <p className="mt-1 text-xs text-emerald-800/60">User langsung aktif (approved) tanpa perlu register & approval.</p>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-emerald-900">Nama Lengkap</label>
+                <Input data-testid="add-user-name" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-emerald-900">Email</label>
+                <Input data-testid="add-user-email" type="email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-emerald-900">Password (min 6 karakter)</label>
+                <Input data-testid="add-user-password" type="password" value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-emerald-900">Role</label>
+                <Select value={addForm.role} onValueChange={(v) => setAddForm({ ...addForm, role: v })}>
+                  <SelectTrigger data-testid="add-user-role"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="anggota">Anggota</SelectItem>
+                    <SelectItem value="spv">SPV</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-emerald-900">Link Anggota Tim (opsional)</label>
+                <Select value={addForm.anggota_id || "none"} onValueChange={(v) => setAddForm({ ...addForm, anggota_id: v === "none" ? null : v })}>
+                  <SelectTrigger data-testid="add-user-anggota"><SelectValue placeholder="Belum di-link" /></SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="none">— Tidak di-link —</SelectItem>
+                    {anggota.map((a) => <SelectItem key={a.id} value={a.id}>{a.nama}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAddOpen(false)}>Batal</Button>
+              <Button onClick={submitAdd} data-testid="add-user-submit" className="bg-emerald-900 hover:bg-emerald-800 text-white">Buat User</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setResetTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" data-testid="reset-pass-dialog">
+            <h3 className="font-display text-lg font-semibold text-emerald-950">Reset Password</h3>
+            <p className="mt-1 text-xs text-emerald-800/60">User: <b>{resetTarget.email}</b>. Semua sesi aktifnya akan dicabut.</p>
+            <div className="mt-3">
+              <label className="text-xs font-medium text-emerald-900">Password Baru (min 6 karakter)</label>
+              <Input data-testid="reset-pass-input" type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setResetTarget(null)}>Batal</Button>
+              <Button onClick={submitReset} data-testid="reset-pass-submit" className="bg-emerald-900 hover:bg-emerald-800 text-white">Reset Password</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

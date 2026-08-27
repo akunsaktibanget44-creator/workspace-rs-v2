@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/lib/AuthContext";
 import {
   listTasks, createTask, updateTask, deleteTask, archiveTask, unarchiveTask, bulkDeleteTasks,
   bulkArchiveTasks, bulkUnarchiveTasks,
   listTaskLists, listTaskLabels, listDivisi, listAnggota, markSeenTasks, moveTask,
-  importExcel, anggotaAnalytics,
+  importExcel, anggotaAnalytics, revisiTask,
 } from "@/lib/api";
 import KanbanBoard from "./tasks/KanbanBoard";
 import TableView from "./tasks/TableView";
@@ -24,12 +25,16 @@ const emptyForm = {
   pemberi_tugas: "", penerima_tugas: "", penerima_tugas_id: null,
   tanggal_mulai: "", deadline: "",
   catatan_tim: "", divisi_id: null, list_id: null, label_ids: [],
+  brief_link: "", hasil_link: "", hasil_catatan: "",
 };
 
 const PRESET_KEY = "qm_filter_presets_v1";
 
 export default function Tasks() {
   const outlet = useOutletContext();
+  const { user } = useAuth();
+  const isSpv = user?.role === "spv";
+  const myAnggotaId = user?.anggota_id || null;
   const [divisiList, setDivisiList] = useState([]);
   const [divisiId, setDivisiId] = useState("");
   const [tasks, setTasks] = useState([]);
@@ -57,12 +62,16 @@ export default function Tasks() {
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   const anggotaMap = useMemo(() => Object.fromEntries(anggotaAll.map((a) => [a.id, a])), [anggotaAll]);
+  const myDivisiId = myAnggotaId ? anggotaMap[myAnggotaId]?.divisi_id : null;
+  const visibleDivisi = isSpv ? divisiList : divisiList.filter((d) => d.id === myDivisiId);
 
   useEffect(() => {
     (async () => {
       const [d, lb, ag] = await Promise.all([listDivisi(), listTaskLabels(), listAnggota()]);
       setDivisiList(d); setLabels(lb); setAnggotaAll(ag);
-      if (!divisiId && d.length > 0) setDivisiId(d[0].id);
+      const myAng = user?.anggota_id ? ag.find((a) => a.id === user.anggota_id) : null;
+      const firstDiv = (user?.role === "spv" ? null : myAng?.divisi_id) || d[0]?.id;
+      if (!divisiId && firstDiv) setDivisiId(firstDiv);
     })();
     // eslint-disable-next-line
   }, []);
@@ -99,7 +108,7 @@ export default function Tasks() {
   };
   const refreshDivisi = async () => {
     const d = await listDivisi(); setDivisiList(d);
-    if (!d.find((x) => x.id === divisiId) && d.length > 0) setDivisiId(d[0].id);
+    if (!d.find((x) => x.id === divisiId) && d.length > 0) setDivisiId(myDivisiId || d[0].id);
   };
   const refreshLabels = async () => setLabels(await listTaskLabels());
   const refreshAnggota = async () => setAnggotaAll(await listAnggota());
@@ -132,6 +141,15 @@ export default function Tasks() {
   const saveCell = async (id, patch) => {
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, ...patch } : t));
     try { await updateTask(id, patch); } catch { toast.error("Gagal simpan"); refresh(); }
+  };
+
+  const submitRevisi = async (taskId, catatan) => {
+    try {
+      await revisiTask(taskId, catatan);
+      toast.success("Revisi dikirim — penerima akan melihat catatanmu");
+      setTaskDialogOpen(false);
+      refresh();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Gagal kirim revisi"); }
   };
 
   const archive = async (id) => { await archiveTask(id); toast.success("Diarsipkan"); refresh(); };
@@ -178,7 +196,7 @@ export default function Tasks() {
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-100 bg-white p-2" data-testid="divisi-selector">
         <Users size={16} className="mx-2 text-emerald-700" />
         <div className="flex flex-wrap gap-1">
-          {divisiList.map((d) => {
+          {visibleDivisi.map((d) => {
             const count = outletUnread[d.id] || 0;
             return (
               <button key={d.id} onClick={() => setDivisiId(d.id)} data-testid={`divisi-tab-${d.id}`}
@@ -191,11 +209,15 @@ export default function Tasks() {
               </button>
             );
           })}
-          <button onClick={() => setDivisiMgrOpen(true)} data-testid="open-divisi-mgr" className="rounded-lg border border-dashed border-emerald-300 px-2.5 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50"><Plus size={12} className="inline" /> Tim</button>
+          {isSpv && (
+            <button onClick={() => setDivisiMgrOpen(true)} data-testid="open-divisi-mgr" className="rounded-lg border border-dashed border-emerald-300 px-2.5 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50"><Plus size={12} className="inline" /> Tim</button>
+          )}
         </div>
         <div className="ml-auto flex flex-wrap gap-1">
           <Button size="sm" variant="ghost" onClick={() => setAnalyticsOpen(true)} data-testid="open-analytics" className="text-emerald-800 hover:bg-emerald-50"><BarChart3 size={14} /> Analytics</Button>
-          <Button size="sm" variant="ghost" onClick={() => setAnggotaMgrOpen(true)} data-testid="open-anggota-mgr" className="text-emerald-800 hover:bg-emerald-50"><UserPlus size={14} /> Anggota</Button>
+          {isSpv && (
+            <Button size="sm" variant="ghost" onClick={() => setAnggotaMgrOpen(true)} data-testid="open-anggota-mgr" className="text-emerald-800 hover:bg-emerald-50"><UserPlus size={14} /> Anggota</Button>
+          )}
         </div>
       </div>
 
@@ -299,12 +321,13 @@ export default function Tasks() {
         <TableView tasks={filtered} lists={lists} labels={labels} anggotaAll={anggotaAll} divisiList={divisiList} currentDivisiId={divisiId}
           selectedIds={selectedIds} setSelectedIds={setSelectedIds}
           onSaveCell={saveCell} onEdit={openEdit} onMove={openMove} onArchive={archive} onUnarchive={unarchive} onDelete={remove}
-          onReorderLocal={onReorderLocal} arsipMode={arsipMode}
+          onReorderLocal={onReorderLocal} arsipMode={arsipMode} isSpv={isSpv}
           refreshLists={refreshLists} refreshLabels={refreshLabels} refreshAnggota={refreshAnggota} />
       )}
 
       <TaskDialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen} form={form} setForm={setForm} onSubmit={submit} editing={!!editing}
         lists={lists} labels={labels} anggotaAll={anggotaAll} divisiList={divisiList} currentDivisiId={divisiId}
+        isSpv={isSpv} myAnggotaId={myAnggotaId} editingTask={editing} onRevisi={submitRevisi}
         onNeedMoveConfirm={(targetDivisiId, anggotaNama) => {
           if (!editing) return;
           const nama = divisiList.find((d) => d.id === targetDivisiId)?.nama;

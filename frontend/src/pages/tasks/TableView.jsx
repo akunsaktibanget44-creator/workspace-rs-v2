@@ -15,7 +15,7 @@ export default function TableView({
   tasks, lists, labels, anggotaAll, divisiList, currentDivisiId,
   selectedIds, setSelectedIds,
   onSaveCell, onEdit, onMove, onArchive, onUnarchive, onDelete, onReorderLocal, arsipMode,
-  refreshLists, refreshLabels, refreshAnggota,
+  refreshLists, refreshLabels, refreshAnggota, isSpv = true,
 }) {
   const listMap = Object.fromEntries(lists.map((l) => [l.id, l]));
   const labelMap = Object.fromEntries(labels.map((l) => [l.id, l]));
@@ -41,7 +41,7 @@ export default function TableView({
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <div className="overflow-hidden rounded-xl border border-emerald-100 bg-white" data-testid="task-table">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-sm">
+          <table className="w-full min-w-[1280px] text-sm">
             <thead className="bg-emerald-50 text-left">
               <tr>
                 <th className="w-12 p-3">
@@ -61,7 +61,7 @@ export default function TableView({
                 </th>
                 <th className="p-3 font-semibold text-emerald-900">
                   <ColumnHeader label="Penerima" items={anggotaAll.filter((a) => a.divisi_id === currentDivisiId)} refresh={refreshAnggota}
-                    onCreate={async (nama) => { await createAnggota({ nama, divisi_id: currentDivisiId }); }} />
+                    onCreate={isSpv ? async (nama) => { await createAnggota({ nama, divisi_id: currentDivisiId }); } : null} />
                 </th>
                 <th className="p-3 font-semibold text-emerald-900">
                   <ColumnHeader label="Label" items={labels} refresh={refreshLabels}
@@ -71,6 +71,7 @@ export default function TableView({
                 </th>
                 <th className="w-32 p-3 font-semibold text-emerald-900">Mulai</th>
                 <th className="w-32 p-3 font-semibold text-emerald-900">Deadline</th>
+                <th className="w-48 p-3 font-semibold text-emerald-900">Hasil Tugas</th>
               </tr>
             </thead>
             <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -81,11 +82,11 @@ export default function TableView({
                     selected={selectedIds.includes(t.id)} anySelected={anySelected}
                     onToggleSelect={() => toggleSelect(t.id)} onSaveCell={onSaveCell}
                     onEdit={onEdit} onMove={onMove} onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
-                    arsipMode={arsipMode}
+                    arsipMode={arsipMode} isSpv={isSpv}
                     refreshLists={refreshLists} refreshLabels={refreshLabels} refreshAnggota={refreshAnggota} />
                 ))}
                 {tasks.length === 0 && (
-                  <tr><td colSpan={8} className="p-8 text-center text-sm text-emerald-800/60">Tidak ada tugas.</td></tr>
+                  <tr><td colSpan={9} className="p-8 text-center text-sm text-emerald-800/60">Tidak ada tugas.</td></tr>
                 )}
               </tbody>
             </SortableContext>
@@ -132,21 +133,27 @@ function ColumnHeader({ label, items, onCreate, onUpdate, onDelete, refresh }) {
           {items.length === 0 && <p className="px-1.5 py-2 text-[10px] italic text-emerald-800/50">Belum ada.</p>}
         </div>
         <div className="mt-2 flex gap-1 border-t border-emerald-100 pt-2">
-          <Input className="h-7 flex-1 text-xs" placeholder={`+ ${label} baru`} value={nama} onChange={(e) => setNama(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()} data-testid={`col-header-input-${label.toLowerCase()}`} />
-          <Button size="sm" onClick={submit} className="h-7 bg-emerald-700 px-2 hover:bg-emerald-800"><Plus size={12} /></Button>
+          {onCreate ? (
+            <>
+              <Input className="h-7 flex-1 text-xs" placeholder={`+ ${label} baru`} value={nama} onChange={(e) => setNama(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submit()} data-testid={`col-header-input-${label.toLowerCase()}`} />
+              <Button size="sm" onClick={submit} className="h-7 bg-emerald-700 px-2 hover:bg-emerald-800"><Plus size={12} /></Button>
+            </>
+          ) : <p className="px-1 py-0.5 text-[10px] italic text-emerald-800/50">Hanya SPV yang bisa menambah.</p>}
         </div>
       </PopoverContent>
     </Popover>
   );
 }
 
-function Row({ task, idx, lists, labels, labelMap, anggotaAll, anggotaMap, divisiList, currentDivisiId, selected, anySelected, onToggleSelect, onSaveCell, onEdit, onMove, onArchive, onUnarchive, onDelete, arsipMode, refreshLists, refreshLabels, refreshAnggota }) {
+function Row({ task, idx, lists, labels, labelMap, anggotaAll, anggotaMap, divisiList, currentDivisiId, selected, anySelected, onToggleSelect, onSaveCell, onEdit, onMove, onArchive, onUnarchive, onDelete, arsipMode, isSpv = true, refreshLists, refreshLabels, refreshAnggota }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const isRutin = task.kategori !== "PROJECT";
   const isMoved = !!task.moved_at;
+  const isDelegasi = task.pemberi_id && task.penerima_tugas_id && task.pemberi_id !== task.penerima_tugas_id;
   const anggota = task.penerima_tugas_id ? anggotaMap[task.penerima_tugas_id] : null;
+  const pemberiAnggota = task.pemberi_id ? anggotaMap[task.pemberi_id] : null;
 
   return (
     <tr ref={setNodeRef} style={style}
@@ -162,11 +169,28 @@ function Row({ task, idx, lists, labels, labelMap, anggotaAll, anggotaMap, divis
         </div>
       </td>
 
-      <td className="p-3">
-        <div className="flex items-center gap-2">
-          <button onClick={() => onEdit(task)} className="text-left font-medium text-emerald-950 hover:text-emerald-700 hover:underline" data-testid={`row-nama-${task.id}`}>{task.nama}</button>
-          {isMoved && <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700">BARU</span>}
-          <div className="ml-auto opacity-0 group-hover:opacity-100">
+      <td className="max-w-[300px] p-3">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <button onClick={() => onEdit(task)} className="block w-full truncate text-left font-medium text-emerald-950 hover:text-emerald-700 hover:underline" data-testid={`row-nama-${task.id}`}>{task.nama}</button>
+            {(isMoved || isDelegasi || task.brief_link || task.status === "REVISI") && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {isMoved && <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700">BARU</span>}
+                {task.status === "REVISI" && (
+                  <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white" data-testid={`row-revisi-${task.id}`}
+                    title={task.revisi_catatan || ""}>REVISI{task.revisi_count > 1 ? ` #${task.revisi_count}` : ""}</span>
+                )}
+                {isDelegasi && pemberiAnggota && (
+                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-700" data-testid={`row-delegasi-${task.id}`}>Dari {pemberiAnggota.nama}</span>
+                )}
+                {task.brief_link && (
+                  <a href={task.brief_link} target="_blank" rel="noopener noreferrer" data-testid={`row-brief-${task.id}`}
+                    className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 hover:bg-emerald-200">Brief ↗</a>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="shrink-0 opacity-0 group-hover:opacity-100">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="rounded p-1 text-emerald-700 hover:bg-emerald-100" data-testid={`row-menu-${task.id}`}><MoreVertical size={13} /></button>
@@ -198,7 +222,7 @@ function Row({ task, idx, lists, labels, labelMap, anggotaAll, anggotaMap, divis
 
       <td className="p-2">
         <CellSelectAnggota value={task.penerima_tugas_id} anggotaAll={anggotaAll} divisiList={divisiList} onChange={(v) => onSaveCell(task.id, { penerima_tugas_id: v })}
-          onAddInline={async (nama) => { await createAnggota({ nama, divisi_id: currentDivisiId }); refreshAnggota(); }} testId={`row-penerima-${task.id}`} current={anggota} />
+          onAddInline={isSpv ? async (nama) => { await createAnggota({ nama, divisi_id: currentDivisiId }); refreshAnggota(); } : null} testId={`row-penerima-${task.id}`} current={anggota} />
       </td>
 
       <td className="p-2">
@@ -216,6 +240,18 @@ function Row({ task, idx, lists, labels, labelMap, anggotaAll, anggotaMap, divis
           onBlur={(e) => e.target.value !== (task.deadline || "") && onSaveCell(task.id, { deadline: e.target.value || null })}
           className="w-full rounded border-transparent bg-transparent px-2 py-1 text-xs text-emerald-900 hover:border-emerald-200 focus:border-emerald-400 focus:outline-none"
           data-testid={`row-deadline-${task.id}`} />
+      </td>
+      <td className="max-w-[220px] p-2" data-testid={`row-hasil-${task.id}`}>
+        {task.hasil_link ? (
+          <a href={task.hasil_link} target="_blank" rel="noopener noreferrer" data-testid={`row-hasil-link-${task.id}`}
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 hover:bg-emerald-200">
+            Link ↗
+          </a>
+        ) : null}
+        {task.hasil_catatan ? (
+          <p className="mt-1 line-clamp-2 break-words text-[10px] text-emerald-800/70">{task.hasil_catatan}</p>
+        ) : null}
+        {!task.hasil_link && !task.hasil_catatan && <span className="text-xs text-emerald-800/30">—</span>}
       </td>
     </tr>
   );
