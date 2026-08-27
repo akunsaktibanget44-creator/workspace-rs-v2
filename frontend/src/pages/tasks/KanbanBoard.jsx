@@ -24,8 +24,21 @@ export default function KanbanBoard({
   const byList = {};
   lists.forEach((l) => (byList[l.id] = []));
   byList["no-list"] = [];
+  // Fallback untuk tugas delegasi yang list_id-nya milik divisi lain:
+  // kelompokkan berdasarkan status agar tetap muncul di kolom yang sesuai.
+  const sortedLists = [...lists].sort((a, b) => a.urutan - b.urutan);
+  const firstList = sortedLists.find((l) => !l.is_done);
+  const doneList = sortedLists.find((l) => l.is_done);
+  const midList = sortedLists.find((l) => !l.is_done && l.id !== firstList?.id) || firstList;
+  const statusToList = (status) => {
+    if (status === "SELESAI") return doneList?.id;
+    if (status === "BELUM_MULAI") return firstList?.id;
+    return midList?.id; // DALAM_PROSES / REVISI / TERKENDALA
+  };
   projectTasks.forEach((t) => {
-    const key = t.list_id && byList[t.list_id] ? t.list_id : "no-list";
+    let key = t.list_id && byList[t.list_id] ? t.list_id : null;
+    if (!key && t.list_id) key = statusToList(t.status); // list milik divisi lain
+    if (!key || !byList[key]) key = "no-list";
     byList[key].push(t);
   });
 

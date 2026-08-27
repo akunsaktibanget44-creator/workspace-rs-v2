@@ -411,24 +411,13 @@ async def create_task(payload: TaskBase, user: dict = Depends(get_current_user))
         # If penerima kosong, default = diri sendiri
         if not data.get("penerima_tugas_id"):
             data["penerima_tugas_id"] = scope["anggota_id"]
-        # Divisi_id mengikuti penerima (untuk delegasi antar divisi)
-        penerima_ang = await db.anggota.find_one({"id": data["penerima_tugas_id"]}, {"_id": 0})
-        if penerima_ang:
-            data["divisi_id"] = penerima_ang.get("divisi_id") or scope["divisi_id"]
-        else:
-            data["divisi_id"] = scope["divisi_id"]
-        if data["divisi_id"] != scope["divisi_id"]:
-            data["list_id"] = None  # lintas divisi → masuk "Tanpa List" di workspace penerima
+        # Tugas tetap "tinggal" di divisi & list pembuat (default Backlog) —
+        # penerima lintas divisi tetap melihatnya via scope penerima_tugas_id.
+        data["divisi_id"] = scope["divisi_id"]
     else:
-        # SPV: kalau pemberi_id kosong tapi ada penerima, kosongkan (SPV bukan anggota)
+        # SPV yang tertaut anggota tercatat sebagai pemberi agar tugas muncul sebagai delegasi darinya
         if not data.get("pemberi_id"):
-            data["pemberi_id"] = None
-        # Divisi mengikuti penerima agar tugas pasti muncul di workspace penerima
-        if data.get("penerima_tugas_id"):
-            penerima_ang = await db.anggota.find_one({"id": data["penerima_tugas_id"]}, {"_id": 0})
-            if penerima_ang and penerima_ang.get("divisi_id") and data.get("divisi_id") != penerima_ang["divisi_id"]:
-                data["divisi_id"] = penerima_ang["divisi_id"]
-                data["list_id"] = None
+            data["pemberi_id"] = scope["anggota_id"] or None
     task = Task(**data)
     await db.tasks.insert_one(task.model_dump())
     return task
@@ -456,6 +445,13 @@ async def update_task(task_id: str, payload: TaskUpdate, user: dict = Depends(ge
             raise HTTPException(403, "Anda hanya pemberi tugas — read-only. Hanya penerima yang dapat mengubah tugas ini.")
         if "divisi_id" in update and update["divisi_id"] != scope["divisi_id"]:
             raise HTTPException(403, "Anggota tidak dapat memindahkan tugas ke tim lain.")
+    # Sinkron status otomatis saat list_id berubah (robust untuk semua client):
+    # list is_done → SELESAI; list pertama (urutan<=1) → BELUM_MULAI; lainnya → DALAM_PROSES.
+    if "list_id" in update and "status" not in update:
+        if update["list_id"]:
+            tl = await db.task_lists.find_one({"id": update["list_id"]}, {"_id": 0})
+            if tl:
+                update["status"] = "SELESAI" if tl.get("is_done") else ("BELUM_MULAI" if tl.get("urutan", 99) <= 1 else "DALAM_PROSES")
     update["updated_at"] = now_iso()
     result = await db.tasks.find_one_and_update(
         {"id": task_id},

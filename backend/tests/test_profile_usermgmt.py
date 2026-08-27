@@ -19,43 +19,61 @@ def login(email, password):
 
 # -------- Profile self-service --------
 class TestProfile:
+    @pytest.fixture(scope="class")
+    def temp_user(self):
+        """Dedicated temp user — parallel (xdist) tests must not fight over Budi's password/sessions."""
+        admin, r = login(*ADMIN)
+        assert r.status_code == 200
+        email = f"TEST_prof_{uuid.uuid4().hex[:8]}@test.id"
+        password = "temp12345"
+        cr = admin.post(f"{API}/auth/users", json={
+            "name": "Temp Profile", "email": email, "password": password, "role": "anggota"
+        }, timeout=15)
+        assert cr.status_code == 200, cr.text
+        uid = cr.json()["user_id"]
+        yield email, password
+        admin.delete(f"{API}/auth/users/{uid}", timeout=15)
+
     def test_budi_login(self):
         s, r = login(*BUDI)
         assert r.status_code == 200, r.text
         assert r.json().get("ok") is True
 
-    def test_update_name(self):
-        s, r = login(*BUDI)
+    def test_update_name(self, temp_user):
+        email, password = temp_user
+        s, r = login(email, password)
         assert r.status_code == 200
         r2 = s.put(f"{API}/auth/profile", json={"name": "Budi Santoso"}, timeout=15)
         assert r2.status_code == 200, r2.text
         me = s.get(f"{API}/auth/me").json()
         assert me["name"] == "Budi Santoso"
         # restore
-        s.put(f"{API}/auth/profile", json={"name": "Budi"})
+        s.put(f"{API}/auth/profile", json={"name": "Temp Profile"})
 
-    def test_change_password_and_restore(self):
-        s, r = login(*BUDI)
+    def test_change_password_and_restore(self, temp_user):
+        email, password = temp_user
+        s, r = login(email, password)
         assert r.status_code == 200
         # change password
         r2 = s.put(f"{API}/auth/profile", json={
-            "current_password": BUDI[1], "new_password": "budi54321"
+            "current_password": password, "new_password": "temp54321"
         }, timeout=15)
         assert r2.status_code == 200, r2.text
         # old password fails
-        _, rold = login(BUDI[0], BUDI[1])
+        _, rold = login(email, password)
         assert rold.status_code == 401
         # new works
-        s2, rnew = login(BUDI[0], "budi54321")
+        s2, rnew = login(email, "temp54321")
         assert rnew.status_code == 200
         # restore
         rr = s2.put(f"{API}/auth/profile", json={
-            "current_password": "budi54321", "new_password": BUDI[1]
+            "current_password": "temp54321", "new_password": password
         })
         assert rr.status_code == 200
 
-    def test_wrong_current_password(self):
-        s, r = login(*BUDI)
+    def test_wrong_current_password(self, temp_user):
+        email, password = temp_user
+        s, r = login(email, password)
         r2 = s.put(f"{API}/auth/profile", json={
             "current_password": "wrongpass", "new_password": "anything123"
         })

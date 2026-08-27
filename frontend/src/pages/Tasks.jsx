@@ -164,7 +164,12 @@ export default function Tasks() {
     let newListId = overId; if (newListId === "no-list") newListId = null;
     if (newListId === task.list_id) return;
     const targetList = lists.find((l) => l.id === newListId);
-    const patch = { list_id: newListId }; if (targetList?.is_done) patch.status = "SELESAI";
+    // Selalu sinkronkan status saat pindah kolom — agar workspace pemberi tugas
+    // (yang mungkin tidak punya list ini) tetap melihat status terbaru.
+    const patch = { list_id: newListId };
+    if (targetList) {
+      patch.status = targetList.is_done ? "SELESAI" : (targetList.urutan <= 1 ? "BELUM_MULAI" : "DALAM_PROSES");
+    }
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
     try {
       await updateTask(taskId, patch);

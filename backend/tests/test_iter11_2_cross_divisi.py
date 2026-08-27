@@ -45,6 +45,7 @@ def test_cross_divisi_delegation_flow(budi, rina, admin):
     # find Rina's anggota
     r = budi.get(f"{API}/anggota", timeout=15)
     rina_row = next(a for a in r.json() if "rina" in a["nama"].lower())
+    budi_row = next(a for a in r.json() if a["nama"].lower() == "budi")
 
     payload = {
         "nama": "TEST_iter162_cross_task",
@@ -55,10 +56,11 @@ def test_cross_divisi_delegation_flow(budi, rina, admin):
     assert cr.status_code in (200, 201), f"create failed: {cr.status_code} {cr.text}"
     task = cr.json()
     task_id = task["id"]
-    assert task.get("divisi_id") == rina_row.get("divisi_id"), (
-        f"divisi mismatch: task={task.get('divisi_id')} rina={rina_row.get('divisi_id')}"
+    # Iter 11.5: tugas tetap di divisi pembuat (Budi), penerima melihat via scope penerima_tugas_id
+    assert task.get("divisi_id") == budi_row.get("divisi_id"), (
+        f"divisi mismatch: task={task.get('divisi_id')} budi={budi_row.get('divisi_id')}"
     )
-    assert task.get("list_id") in (None, ""), f"list_id should be null when cross-divisi, got {task.get('list_id')}"
+    assert task.get("pemberi_id") == budi_row.get("id"), "pemberi_id harus = Budi"
 
     # Rina sees the task
     lr = rina.get(f"{API}/tasks", timeout=15)

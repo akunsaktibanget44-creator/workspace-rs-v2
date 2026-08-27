@@ -11,6 +11,9 @@ import { TIPES } from "./shared";
 import { reorderTasks, createTaskList, updateTaskList, deleteTaskList, createTaskLabel, updateTaskLabel, deleteTaskLabel, createAnggota } from "@/lib/api";
 import { toast } from "sonner";
 
+const STATUS_LABELS = { BELUM_MULAI: "Belum Mulai", DALAM_PROSES: "Dalam Proses", SELESAI: "Selesai", TERKENDALA: "Terkendala", REVISI: "Revisi" };
+const STATUS_COLORS = { BELUM_MULAI: "bg-slate-100 text-slate-700", DALAM_PROSES: "bg-amber-100 text-amber-800", SELESAI: "bg-emerald-100 text-emerald-800", TERKENDALA: "bg-orange-100 text-orange-800", REVISI: "bg-red-100 text-red-700" };
+
 export default function TableView({
   tasks, lists, labels, anggotaAll, divisiList, currentDivisiId,
   selectedIds, setSelectedIds,
@@ -146,7 +149,7 @@ function ColumnHeader({ label, items, onCreate, onUpdate, onDelete, refresh }) {
   );
 }
 
-function Row({ task, idx, lists, labels, labelMap, anggotaAll, anggotaMap, divisiList, currentDivisiId, selected, anySelected, onToggleSelect, onSaveCell, onEdit, onMove, onArchive, onUnarchive, onDelete, arsipMode, isSpv = true, refreshLists, refreshLabels, refreshAnggota }) {
+function Row({ task, idx, lists, labels, labelMap, listMap, anggotaAll, anggotaMap, divisiList, currentDivisiId, selected, anySelected, onToggleSelect, onSaveCell, onEdit, onMove, onArchive, onUnarchive, onDelete, arsipMode, isSpv = true, refreshLists, refreshLabels, refreshAnggota }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const isRutin = task.kategori !== "PROJECT";
@@ -213,6 +216,11 @@ function Row({ task, idx, lists, labels, labelMap, anggotaAll, anggotaMap, divis
         {isRutin ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-1 text-[11px] font-semibold text-purple-800">
             <Repeat size={10} /> On Tracker
+          </span>
+        ) : task.list_id && !listMap[task.list_id] ? (
+          // List milik divisi lain (delegasi) → tampilkan status sebagai badge statis
+          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_COLORS[task.status] || STATUS_COLORS.BELUM_MULAI}`} data-testid={`row-status-${task.id}`}>
+            {STATUS_LABELS[task.status] || task.status}
           </span>
         ) : (
           <CellSelectWithAdd value={task.list_id} options={lists} onChange={(v) => onSaveCell(task.id, { list_id: v })}
