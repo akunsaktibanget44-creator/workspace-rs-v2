@@ -176,6 +176,7 @@ class MoveTaskPayload(BaseModel):
     divisi_id: Optional[str] = None
     list_id: Optional[str] = None
     urutan: Optional[int] = None
+    penerima_tugas_id: Optional[str] = None  # pindah/delegasi ke orang lain (boleh lintas divisi)
 
 
 # ============ DIVISI (TIM) MODEL ============
@@ -443,7 +444,7 @@ async def update_task(task_id: str, payload: TaskUpdate, user: dict = Depends(ge
         is_pemberi = my_ang and task.get("pemberi_id") == my_ang
         if not is_penerima and is_pemberi:
             raise HTTPException(403, "Anda hanya pemberi tugas — read-only. Hanya penerima yang dapat mengubah tugas ini.")
-        if "divisi_id" in update and update["divisi_id"] != scope["divisi_id"]:
+        if "divisi_id" in update and update["divisi_id"] != scope["divisi_id"] and update["divisi_id"] != task.get("divisi_id"):
             raise HTTPException(403, "Anggota tidak dapat memindahkan tugas ke tim lain.")
     # Sinkron status otomatis saat list_id berubah (robust untuk semua client):
     # list is_done → SELESAI; list pertama (urutan<=1) → BELUM_MULAI; lainnya → DALAM_PROSES.
@@ -533,9 +534,18 @@ async def unarchive_task(task_id: str, user: dict = Depends(get_current_user)):
 async def move_task(task_id: str, payload: MoveTaskPayload, user: dict = Depends(get_current_user)):
     task = await _assert_task_access(task_id, user)
     scope = await user_scope(user)
-    if not scope["is_spv"] and payload.divisi_id and payload.divisi_id != scope["divisi_id"]:
+    if not scope["is_spv"] and payload.divisi_id and payload.divisi_id != scope["divisi_id"] and payload.divisi_id != task.get("divisi_id"):
         raise HTTPException(403, "Anggota tidak dapat memindahkan tugas ke tim lain.")
+    # Pindah ke perorangan (reassign penerima) — boleh lintas divisi.
+    # Hanya SPV, pemberi, atau penerima saat ini yang boleh.
+    if payload.penerima_tugas_id is not None and payload.penerima_tugas_id != task.get("penerima_tugas_id"):
+        my_ang = scope["anggota_id"]
+        if not scope["is_spv"] and my_ang not in (task.get("pemberi_id"), task.get("penerima_tugas_id")):
+            raise HTTPException(403, "Hanya pemberi/penerima tugas atau SPV yang bisa memindahkan ke orang lain.")
     update: dict = {"updated_at": now_iso()}
+    if payload.penerima_tugas_id is not None and payload.penerima_tugas_id != task.get("penerima_tugas_id"):
+        update["penerima_tugas_id"] = payload.penerima_tugas_id
+        update["moved_at"] = now_iso()
     if payload.divisi_id is not None:
         update["divisi_id"] = payload.divisi_id
         if payload.divisi_id != task.get("divisi_id"):
@@ -631,6 +641,44 @@ async def unread_tasks(user: dict = Depends(get_current_user)):
         d = r.get("divisi_id") or "none"
         by_divisi[d] = by_divisi.get(d, 0) + 1
     return {"total": len(rows), "by_divisi": by_divisi}
+
+
+# ============ NOTIFICATIONS (TUGAS MASUK DARI TIM LAIN) ============
+@api_router.get("/notifications/incoming")
+async def incoming_notifications(user: dict = Depends(get_current_user)):
+    """Tugas yang didelegasikan KE saya oleh orang lain, sejak terakhir dilihat."""
+    scope = await user_scope(user)
+    if not scope["anggota_id"]:
+        return {"count": 0, "items": []}
+    seen = await db.user_task_seen.find_one({"user_id": scope["user_id"]}, {"_id": 0})
+    q: dict = {
+        "penerima_tugas_id": scope["anggota_id"],
+        "pemberi_id": {"$nin": [None, scope["anggota_id"]]},
+        "archived": {"$ne": True},
+    }
+    if seen and seen.get("last_seen_at"):
+        q["created_at"] = {"$gt": seen["last_seen_at"]}
+    rows = await db.tasks.find(
+        q, {"_id": 0, "id": 1, "nama": 1, "pemberi_id": 1, "divisi_id": 1, "created_at": 1, "status": 1}
+    ).sort("created_at", -1).to_list(50)
+    pemberi_ids = [pid for pid in {r.get("pemberi_id") for r in rows} if pid]
+    divisi_ids = [did for did in {r.get("divisi_id") for r in rows} if did]
+    anggota_rows = await db.anggota.find({"id": {"$in": pemberi_ids}}, {"_id": 0, "id": 1, "nama": 1}).to_list(200) if pemberi_ids else []
+    divisi_rows = await db.divisi.find({"id": {"$in": divisi_ids}}, {"_id": 0, "id": 1, "nama": 1}).to_list(200) if divisi_ids else []
+    amap = {a["id"]: a["nama"] for a in anggota_rows}
+    dmap = {d["id"]: d["nama"] for d in divisi_rows}
+    items = [{**r, "pemberi_nama": amap.get(r.get("pemberi_id"), ""), "divisi_nama": dmap.get(r.get("divisi_id"), "")} for r in rows]
+    return {"count": len(items), "items": items}
+
+
+@api_router.post("/notifications/mark_seen")
+async def mark_notifications_seen(user: dict = Depends(get_current_user)):
+    await db.user_task_seen.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"last_seen_at": now_iso()}},
+        upsert=True,
+    )
+    return {"ok": True}
 
 
 @api_router.post("/task_mark_seen")

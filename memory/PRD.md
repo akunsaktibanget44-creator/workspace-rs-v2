@@ -32,6 +32,11 @@
 - `PUT /auth/profile`, `POST /auth/users` (SPV buat user langsung approved), `PUT /auth/users/{id}/password` (reset + cabut sesi).
 - Sidebar: tombol "Profil Saya"; Manajemen User: "Tambah User" + reset password per baris.
 
+### 11.6 Fix Gagal Simpan + Notifikasi Tugas Masuk + Pindah Per-Orang
+- Fix "Gagal simpan" saat penerima edit hasil tugas lintas divisi: guard `divisi_id` di `update_task`/`move_task` hanya menolak jika nilai BENAR-BENAR berubah (bukan sekadar ikut terkirim dari form). Toast kini menampilkan pesan error server asli.
+- Notifikasi: endpoint `GET /notifications/incoming` (tugas didelegasikan ke saya sejak last_seen, `user_task_seen` collection) + `POST /notifications/mark_seen`. Komponen `NotificationBell.jsx` (lonceng + badge + panel) di header desktop & mobile.
+- Pindah tugas per-orang: `MoveTaskPayload.penerima_tugas_id` — SPV/pemberi/penerima boleh reassign, lintas divisi; dialog Pindahkan punya picker "Penerima Baru" grouped per divisi.
+
 ### 11.5 Fix Default Backlog, Sinkron Status & Crash Tabel
 - Delegasi tidak lagi memindahkan divisi/list tugas — tugas tetap di divisi & list pembuat (default Backlog); penerima melihat via scope. SPV tertaut anggota tercatat sebagai pemberi.
 - Sinkron status otomatis saat `list_id` berubah (backend `update_task` + drag kanban): is_done→SELESAI, urutan≤1→BELUM_MULAI, lainnya→DALAM_PROSES.

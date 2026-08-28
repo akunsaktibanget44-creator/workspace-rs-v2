@@ -126,6 +126,8 @@ export const bulkMoveTasks = (payload) => api.post(`/tasks/bulk_move`, payload).
 export const reorderTasks = (task_ids) => api.post(`/tasks/reorder`, { task_ids }).then((r) => r.data);
 export const unreadTasks = () => api.get("/task_unread").then((r) => r.data);
 export const markSeenTasks = (divisi_id) => api.post(`/task_mark_seen`, null, { params: divisi_id ? { divisi_id } : {} }).then((r) => r.data);
+export const listIncomingNotifications = () => api.get("/notifications/incoming").then((r) => r.data);
+export const markNotificationsSeen = () => api.post("/notifications/mark_seen").then((r) => r.data);
 
 // Task Lists (kanban columns)
 export const listTaskLists = (params = {}) => api.get("/task_lists", { params }).then((r) => r.data);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import NotificationBell from "@/components/NotificationBell";
 import { LayoutDashboard, ListTodo, HeartHandshake, Award, Menu, X, Repeat, Activity, Users, LogOut, ShieldCheck, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
@@ -128,9 +129,12 @@ export default function AppShell() {
           <SanadLogo size={30} variant="mark" />
           <span className="font-display text-sm font-bold tracking-[0.12em]" style={{ color: "#0f4f47" }}>WORKSPACE</span>
         </div>
-        <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen((v) => !v)} className="rounded-md p-2 text-emerald-900 hover:bg-emerald-100">
-          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen((v) => !v)} className="rounded-md p-2 text-emerald-900 hover:bg-emerald-100">
+            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
       </header>
 
       {mobileOpen && (
@@ -144,11 +148,14 @@ export default function AppShell() {
 
       <main className="md:ml-64">
         <div className="mx-auto max-w-6xl px-4 py-6 md:px-10 md:py-10">
-          <div className="mb-6 hidden md:block">
-            <p className="text-xs uppercase tracking-widest text-emerald-700/60">Workspace</p>
-            <h2 className="font-display text-3xl font-bold text-emerald-950 md:text-4xl" data-testid="page-title">
-              {current.label}
-            </h2>
+          <div className="mb-6 hidden md:flex md:items-start md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-emerald-700/60">Workspace</p>
+              <h2 className="font-display text-3xl font-bold text-emerald-950 md:text-4xl" data-testid="page-title">
+                {current.label}
+              </h2>
+            </div>
+            <NotificationBell />
           </div>
           <Outlet context={{ unread, refreshUnread }} />
         </div>

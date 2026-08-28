@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth, formatApiErr } from "@/lib/AuthContext";
 import {
   listTasks, createTask, updateTask, deleteTask, archiveTask, unarchiveTask, bulkDeleteTasks,
   bulkArchiveTasks, bulkUnarchiveTasks,
@@ -135,12 +135,12 @@ export default function Tasks() {
       if (editing) { await updateTask(editing.id, payload); toast.success("Tugas diperbarui"); }
       else { delete payload.catatan_spv; delete payload.link_output; payload.divisi_id = divisiId; await createTask(payload); toast.success("Tugas baru ditambahkan"); }
       setTaskDialogOpen(false); refresh();
-    } catch { toast.error("Gagal simpan"); }
+    } catch (e) { toast.error(formatApiErr(e)); }
   };
 
   const saveCell = async (id, patch) => {
     setTasks((prev) => prev.map((t) => t.id === id ? { ...t, ...patch } : t));
-    try { await updateTask(id, patch); } catch { toast.error("Gagal simpan"); refresh(); }
+    try { await updateTask(id, patch); } catch (e) { toast.error(formatApiErr(e)); refresh(); }
   };
 
   const submitRevisi = async (taskId, catatan) => {
@@ -340,7 +340,7 @@ export default function Tasks() {
             moveTask(editing.id, { divisi_id: targetDivisiId }).then(refresh);
           }
         }} />
-      <MoveTaskDialog open={moveOpen} onOpenChange={setMoveOpen} task={moveTaskState} divisiList={divisiList} allListsMap={allListsMap} refreshLists={refreshAllListsMap} onMoved={refresh} />
+      <MoveTaskDialog open={moveOpen} onOpenChange={setMoveOpen} task={moveTaskState} divisiList={divisiList} allListsMap={allListsMap} refreshLists={refreshAllListsMap} onMoved={refresh} anggotaAll={anggotaAll} />
       <BulkMoveDialog open={bulkMoveOpen} onOpenChange={setBulkMoveOpen} taskIds={selectedIds} divisiList={divisiList} allListsMap={allListsMap} onDone={() => { setSelectedIds([]); refresh(); }} />
       <DivisiManagerDialog open={divisiMgrOpen} onOpenChange={setDivisiMgrOpen} divisiList={divisiList} onChange={refreshDivisi} />
       <AnggotaManagerDialog open={anggotaMgrOpen} onOpenChange={setAnggotaMgrOpen} anggotaList={anggotaAll} divisiList={divisiList} currentDivisiId={divisiId} onChange={refreshAnggota} />

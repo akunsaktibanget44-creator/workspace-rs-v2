@@ -256,9 +256,10 @@ export function TaskDialog({ open, onOpenChange, form, setForm, onSubmit, editin
 }
 
 // ============ MOVE TASK DIALOG (single) ============
-export function MoveTaskDialog({ open, onOpenChange, task, divisiList, allListsMap, refreshLists, onMoved }) {
+export function MoveTaskDialog({ open, onOpenChange, task, divisiList, allListsMap, refreshLists, onMoved, anggotaAll = [] }) {
   const [targetDivisi, setTargetDivisi] = useState("");
   const [targetList, setTargetList] = useState("");
+  const [targetPenerima, setTargetPenerima] = useState("keep");
   const [posisi, setPosisi] = useState(1);
   const [newListName, setNewListName] = useState("");
   const [showNewList, setShowNewList] = useState(false);
@@ -267,6 +268,7 @@ export function MoveTaskDialog({ open, onOpenChange, task, divisiList, allListsM
     if (task) {
       setTargetDivisi(task.divisi_id || "");
       setTargetList("");
+      setTargetPenerima("keep");
       setPosisi(1);
       setShowNewList(false);
     }
@@ -288,15 +290,20 @@ export function MoveTaskDialog({ open, onOpenChange, task, divisiList, allListsM
     if (!task) return;
     if (!targetDivisi) return toast.error("Pilih tim tujuan");
     try {
-      await moveTask(task.id, {
+      const payload = {
         divisi_id: targetDivisi,
         list_id: targetList || null,
         urutan: Math.max(1, parseInt(posisi, 10) || 1),
-      });
-      toast.success(`Tugas dipindahkan ke ${divisiList.find((d) => d.id === targetDivisi)?.nama}`);
+      };
+      if (targetPenerima && targetPenerima !== "keep") payload.penerima_tugas_id = targetPenerima;
+      await moveTask(task.id, payload);
+      const penerimaBaru = targetPenerima !== "keep" ? anggotaAll.find((a) => a.id === targetPenerima) : null;
+      toast.success(penerimaBaru
+        ? `Tugas dipindahkan ke ${penerimaBaru.nama}`
+        : `Tugas dipindahkan ke ${divisiList.find((d) => d.id === targetDivisi)?.nama}`);
       onOpenChange(false);
       onMoved();
-    } catch { toast.error("Gagal memindahkan"); }
+    } catch (e) { toast.error(e?.response?.data?.detail || "Gagal memindahkan"); }
   };
 
   return (
@@ -317,6 +324,32 @@ export function MoveTaskDialog({ open, onOpenChange, task, divisiList, allListsM
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-widest text-emerald-800/70">PENERIMA BARU (OPSIONAL)</label>
+            <Select value={targetPenerima} onValueChange={setTargetPenerima}>
+              <SelectTrigger data-testid="move-select-penerima"><SelectValue placeholder="Tetap" /></SelectTrigger>
+              <SelectContent className="max-h-64">
+                <SelectItem value="keep">— Tetap (tidak berubah) —</SelectItem>
+                {divisiList.map((d) => {
+                  const arr = anggotaAll.filter((a) => a.divisi_id === d.id);
+                  if (arr.length === 0) return null;
+                  return (
+                    <SelectGroup key={d.id}>
+                      <SelectLabel className="text-[10px] uppercase text-emerald-800/60">{d.nama}</SelectLabel>
+                      {arr.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ background: a.warna }} />{a.nama}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[10px] text-emerald-700/60">
+              Bisa pindah ke <b>perorangan lintas divisi</b> — tugas tetap tampil di workspace Anda sebagai monitor.
+            </p>
           </div>
           <div>
             <label className="text-[11px] font-bold uppercase tracking-widest text-emerald-800/70">PILIH LIST TUJUAN</label>
